@@ -13,6 +13,7 @@ from src.data.generator import (
     CATEGORY_COUNTS,
     GST_RATE,
     TDS_RATE,
+    _compute_settlement_fields,
     generate_batch,
     write_batch,
 )
@@ -329,3 +330,162 @@ def test_all_order_timestamps_within_fixed_batch_window(batch):
 
     for order in batch.orders:
         assert BATCH_START <= order.timestamp.date() <= BATCH_END, order.order_id
+
+
+# ---------------------------------------------------------------------------
+# Gap fix 1 -- missing_tax_line: dedicated coverage of the Q1 resolution
+# (docs/plan.md Layer 1 Addendum A1). A missing_tax_line record must (a) stay
+# internally valid -- net_amount consistent with the real, uncorrected error
+# -- while also (b) producing a genuine, catchable discrepancy when the
+# zeroed line is recomputed against the actual GST/TDS rate constants.
+# ---------------------------------------------------------------------------
+
+def test_missing_tax_line_count(batch):
+    counts = Counter(entry.category for entry in batch.ground_truth)
+    assert counts["missing_tax_line"] == CATEGORY_COUNTS["missing_tax_line"]
+
+
+def test_missing_tax_line_both_root_causes_reachable(batch):
+    # Not just settable -- actually produced by the generator for this seed.
+    root_causes = {
+        e.expected_root_cause_code
+        for e in batch.ground_truth
+        if e.category == "missing_tax_line"
+    }
+    assert root_causes == {"MISSING_GST", "MISSING_TDS"}
+
+
+def test_missing_tax_line_settlements_are_internally_consistent(batch):
+    # (a) The record itself stays valid: net_amount reflects the real,
+    # uncorrected shortfall, not a value inconsistent with the zeroed line.
+    # GatewaySettlement's own model_validator already enforces this at
+    # construction time; this test proves it holds for every missing_tax_line
+    # record specifically, not just settlements in general.
+    entries = [e for e in batch.ground_truth if e.category == "missing_tax_line"]
+    assert len(entries) > 0
+    for entry in entries:
+        settlement = next(s for s in batch.settlements if s.order_id == entry.order_id)
+        assert settlement.net_amount == (
+            settlement.gross_amount - settlement.mdr - settlement.gst_on_mdr - settlement.tds_194o
+        ), entry.order_id
+        if entry.expected_root_cause_code == "MISSING_GST":
+            assert settlement.gst_on_mdr == Decimal("0.00"), entry.order_id
+            assert settlement.tds_194o != Decimal("0.00"), entry.order_id
+        else:
+            assert settlement.tds_194o == Decimal("0.00"), entry.order_id
+            assert settlement.gst_on_mdr != Decimal("0.00"), entry.order_id
+
+
+def test_missing_tax_line_produces_real_discrepancy_against_recomputed_tax_rules(batch):
+    # (b) Recomputing the omitted line from the actual GST/TDS constants
+    # against this settlement's own gross/mdr must diverge from the recorded
+    # (zeroed) value by exactly expected_delta_paise -- proving this is a
+    # genuine, quantifiable discrepancy, not a cosmetically-valid record with
+    # nothing for a diagnostic tool to actually catch.
+    entries = [e for e in batch.ground_truth if e.category == "missing_tax_line"]
+    assert len(entries) > 0
+    for entry in entries:
+        settlement = next(s for s in batch.settlements if s.order_id == entry.order_id)
+        if entry.expected_root_cause_code == "MISSING_GST":
+            recomputed = (settlement.mdr * GST_RATE).quantize(Decimal("0.01"))
+            recorded = settlement.gst_on_mdr
+        else:
+            recomputed = (settlement.gross_amount * TDS_RATE).quantize(Decimal("0.01"))
+            recorded = settlement.tds_194o
+        assert recomputed > 0, entry.order_id  # there must be something real to catch
+        assert recorded != recomputed, entry.order_id
+        assert to_paise(recomputed - recorded) == entry.expected_delta_paise, entry.order_id
+
+
+# ---------------------------------------------------------------------------
+# Gap fix 2 -- refund_clawback: MDR is structurally never reversed by a
+# refund (Q2, docs/plan.md Layer 1 Addendum A2). There is no separate
+# "mdr_reversed" field or refund_events.json in this implementation -- A2
+# modeled the rule structurally, via GatewaySettlement being generated from
+# gross_amount alone, unaffected by InternalOrder.refund_amount. This test
+# proves that structural invariant directly: a refunded order's settlement
+# carries exactly the MDR/GST it would have carried had no refund occurred.
+# ---------------------------------------------------------------------------
+
+def test_refund_clawback_settlement_mdr_never_reduced_by_refund(batch):
+    entries = [e for e in batch.ground_truth if e.category == "refund_clawback"]
+    assert len(entries) > 0
+    for entry in entries:
+        order = next(o for o in batch.orders if o.order_id == entry.order_id)
+        settlement = next(s for s in batch.settlements if s.order_id == entry.order_id)
+        assert order.refund_amount is not None, entry.order_id
+
+        unaffected_mdr, unaffected_gst, unaffected_tds, unaffected_net = _compute_settlement_fields(
+            order.gross_amount, settlement.payment_method
+        )
+        assert settlement.mdr == unaffected_mdr, entry.order_id
+        assert settlement.gst_on_mdr == unaffected_gst, entry.order_id
+        assert settlement.gross_amount == order.gross_amount, entry.order_id
+        # The refund reduces nothing on the gateway side -- it is purely an
+        # InternalOrder-level fact the ledger must reconcile against later.
+        assert settlement.net_amount == unaffected_net, entry.order_id
+
+
+# ---------------------------------------------------------------------------
+# Gap fix 3 -- ground_truth.json keying scheme (Q4, docs/plan.md Layer 1
+# Addendum A4). GroundTruthEntry has no separate utr field -- order-less
+# anomalies are keyed entirely through the UNMATCHED_BANK_<utr> order_id
+# scheme. This proves that scheme is actually applied correctly: synthetic
+# keys never collide with a real order_id, and categories anchored to a real
+# order actually reference one that exists.
+# ---------------------------------------------------------------------------
+
+def test_order_less_categories_use_synthetic_keys_never_colliding_with_real_orders(batch):
+    real_order_ids = {o.order_id for o in batch.orders}
+    order_less_entries = [
+        e for e in batch.ground_truth if e.category in ("orphan", "adversarial_trap")
+    ]
+    assert len(order_less_entries) > 0
+    for entry in order_less_entries:
+        assert entry.order_id.startswith("UNMATCHED_BANK_"), entry.order_id
+        assert entry.order_id not in real_order_ids, entry.order_id
+        utr = entry.order_id[len("UNMATCHED_BANK_"):]
+        assert any(b.utr == utr for b in batch.bank_lines), entry.order_id
+
+
+def test_order_anchored_categories_reference_a_real_order(batch):
+    real_order_ids = {o.order_id for o in batch.orders}
+    order_anchored_entries = [
+        e
+        for e in batch.ground_truth
+        if e.category
+        in ("clean_match", "utr_batch", "cutoff_drift", "fee_drift", "missing_tax_line",
+            "short_settlement", "duplicate_credit", "refund_clawback")
+    ]
+    assert len(order_anchored_entries) > 0
+    for entry in order_anchored_entries:
+        assert entry.order_id in real_order_ids, entry.order_id
+        assert not entry.order_id.startswith("UNMATCHED_BANK_"), entry.order_id
+
+
+# ---------------------------------------------------------------------------
+# Gap fix 4 -- fee_drift's is_international flag must actually be set by the
+# generator, not merely accepted by the model (Q3, docs/plan.md Layer 1
+# Addendum A3). Without this, INTL_MARKUP is a reachable RootCauseCode value
+# in principle but dead in practice.
+# ---------------------------------------------------------------------------
+
+def test_fee_drift_is_international_flag_actually_used_by_generator(batch):
+    fee_drift_entries = [e for e in batch.ground_truth if e.category == "fee_drift"]
+    assert len(fee_drift_entries) > 0
+
+    international_root_causes = set()
+    domestic_root_causes = set()
+    for entry in fee_drift_entries:
+        settlement = next(s for s in batch.settlements if s.order_id == entry.order_id)
+        if settlement.is_international:
+            international_root_causes.add(entry.expected_root_cause_code)
+        else:
+            domestic_root_causes.add(entry.expected_root_cause_code)
+
+    assert "INTL_MARKUP" in international_root_causes, (
+        "no fee_drift settlement had is_international=True -- INTL_MARKUP is unreachable"
+    )
+    assert "AMEX_SURCHARGE" in domestic_root_causes, (
+        "no fee_drift settlement had is_international=False -- AMEX_SURCHARGE is unreachable"
+    )
