@@ -6,3 +6,5 @@ data/agent_runs/
 .env
 CLAUDE.md
 .claude/
+"CLAUDE.md" 
+".claude/" 
