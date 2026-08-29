@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/agent_runs/
+.env
+CLAUDE.md
+.claude/
