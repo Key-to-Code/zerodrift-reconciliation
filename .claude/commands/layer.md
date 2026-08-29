@@ -14,8 +14,8 @@ Wait for my go-ahead before writing any implementation code. Once approved:
 
 3. Write the tests first.
 4. Implement until they pass honestly — do not edit a test to make it pass.
-5. Run `pytest tests/ -v` — the **whole** suite, not just this layer's new file — and
-   paste the real output.
+5. Run `python -m pytest tests/ -v` — the **whole** suite, not just this layer's new
+   file — and paste the real output.
 6. Report acceptance-criteria status as PASS/FAIL, each with the specific test that
    proves it. Do not mark anything PASS that no test actually covers.
 7. `git commit` with the layer number in the message.

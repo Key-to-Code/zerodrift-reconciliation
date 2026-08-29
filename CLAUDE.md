@@ -135,3 +135,7 @@ If you believe something outside `docs/plan.md` should be added — even a genui
 improvement — **propose it and wait for approval**. Do not add it silently mid-layer.
 Distinguish clearly, out loud, between a real bug fix (proceed once flagged) and new
 scope disguised as a fix (flag explicitly as optional, do not add without approval).
+
+## Environment note
+`pytest.ini` at the project root sets `pythonpath = .`, so both `pytest tests/ -v`
+and `python -m pytest tests/ -v` work correctly and are equivalent on this project.

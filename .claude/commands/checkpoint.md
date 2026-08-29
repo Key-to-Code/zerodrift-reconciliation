@@ -1,5 +1,5 @@
-Run `pytest tests/ -v` right now and paste the real, complete output — do not summarize
-or truncate it.
+Run `python -m pytest tests/ -v` right now and paste the real, complete output — do not
+summarize or truncate it.
 
 Then, for the current layer in `docs/plan.md`: go through every acceptance-criteria
 checkbox one at a time and state PASS or FAIL, naming the exact test that proves it. If
