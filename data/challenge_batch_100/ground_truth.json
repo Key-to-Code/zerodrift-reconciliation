@@ -1,0 +1,802 @@
+[
+  {
+    "order_id": "ORD1001",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1002",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1003",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1004",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1005",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1006",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1007",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1008",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1009",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1010",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1011",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1012",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1013",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1014",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1015",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1016",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1017",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1018",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1019",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1020",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1021",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1022",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1023",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1024",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1025",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1026",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1027",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1028",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1029",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1030",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1031",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1032",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1033",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1034",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1035",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1036",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1037",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1038",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1039",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1040",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1041",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1042",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1043",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1044",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1045",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1046",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1047",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1048",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1049",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1050",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1051",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1052",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1053",
+    "category": "clean_match",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Standard settlement; MDR/GST/TDS all consistent with the rate table."
+  },
+  {
+    "order_id": "ORD1054",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR5791662169 with 3 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1055",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR5791662169 with 3 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1056",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR5791662169 with 3 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1057",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR5791662169 with 3 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1058",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR9249648005 with 2 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1059",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR9249648005 with 2 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1060",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR9249648005 with 2 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1061",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR3381183483 with 2 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1062",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR3381183483 with 2 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1063",
+    "category": "utr_batch",
+    "expected_resolution": "fast_path",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Grouped under UTR UTR3381183483 with 2 sibling order(s); net amounts split via largest-remainder allocation (Layer 3)."
+  },
+  {
+    "order_id": "ORD1064",
+    "category": "cutoff_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "CUTOFF_T2",
+    "expected_delta_paise": 0,
+    "notes": "Order placed at 23:49:13 IST; cutoff pushed settlement to 2025-01-20 (+1 business day beyond standard T+2)."
+  },
+  {
+    "order_id": "ORD1065",
+    "category": "cutoff_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "CUTOFF_T2",
+    "expected_delta_paise": 0,
+    "notes": "Order placed at 23:53:30 IST; cutoff pushed settlement to 2025-01-15 (+1 business day beyond standard T+2)."
+  },
+  {
+    "order_id": "ORD1066",
+    "category": "cutoff_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "CUTOFF_T2",
+    "expected_delta_paise": 0,
+    "notes": "Order placed at 23:50:05 IST; cutoff pushed settlement to 2025-01-29 (+1 business day beyond standard T+2)."
+  },
+  {
+    "order_id": "ORD1067",
+    "category": "cutoff_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "CUTOFF_T1",
+    "expected_delta_paise": 0,
+    "notes": "Order placed at 23:48:30 IST; cutoff pushed settlement to 2025-01-09 (+1 business day beyond standard T+1)."
+  },
+  {
+    "order_id": "ORD1068",
+    "category": "cutoff_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "CUTOFF_T2",
+    "expected_delta_paise": 0,
+    "notes": "Order placed at 23:48:45 IST; cutoff pushed settlement to 2025-01-29 (+1 business day beyond standard T+2)."
+  },
+  {
+    "order_id": "ORD1069",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "INTL_MARKUP",
+    "expected_delta_paise": 4464,
+    "notes": "amex surcharge of 2.7100% not in standard MDR table (+Rs 44.64)."
+  },
+  {
+    "order_id": "ORD1070",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "INTL_MARKUP",
+    "expected_delta_paise": 9320,
+    "notes": "amex surcharge of 2.3300% not in standard MDR table (+Rs 93.20)."
+  },
+  {
+    "order_id": "ORD1071",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "AMEX_SURCHARGE",
+    "expected_delta_paise": 10757,
+    "notes": "amex surcharge of 2.3500% not in standard MDR table (+Rs 107.57)."
+  },
+  {
+    "order_id": "ORD1072",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "AMEX_SURCHARGE",
+    "expected_delta_paise": 4951,
+    "notes": "amex surcharge of 2.1900% not in standard MDR table (+Rs 49.51)."
+  },
+  {
+    "order_id": "ORD1073",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "INTL_MARKUP",
+    "expected_delta_paise": 5960,
+    "notes": "amex surcharge of 2.2600% not in standard MDR table (+Rs 59.60)."
+  },
+  {
+    "order_id": "ORD1074",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "AMEX_SURCHARGE",
+    "expected_delta_paise": 9983,
+    "notes": "amex surcharge of 2.00% not in standard MDR table (+Rs 99.83)."
+  },
+  {
+    "order_id": "ORD1075",
+    "category": "fee_drift",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "AMEX_SURCHARGE",
+    "expected_delta_paise": 11423,
+    "notes": "amex surcharge of 2.3400% not in standard MDR table (+Rs 114.23)."
+  },
+  {
+    "order_id": "ORD1076",
+    "category": "missing_tax_line",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "MISSING_GST",
+    "expected_delta_paise": 1803,
+    "notes": "GST line omitted from the settlement feed."
+  },
+  {
+    "order_id": "ORD1077",
+    "category": "missing_tax_line",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "MISSING_GST",
+    "expected_delta_paise": 997,
+    "notes": "GST line omitted from the settlement feed."
+  },
+  {
+    "order_id": "ORD1078",
+    "category": "missing_tax_line",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "MISSING_GST",
+    "expected_delta_paise": 418,
+    "notes": "GST line omitted from the settlement feed."
+  },
+  {
+    "order_id": "ORD1079",
+    "category": "missing_tax_line",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "MISSING_TDS",
+    "expected_delta_paise": 392,
+    "notes": "TDS line omitted from the settlement feed."
+  },
+  {
+    "order_id": "ORD1080",
+    "category": "missing_tax_line",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "MISSING_TDS",
+    "expected_delta_paise": 346,
+    "notes": "TDS line omitted from the settlement feed."
+  },
+  {
+    "order_id": "ORD1081",
+    "category": "short_settlement",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Settlement recorded with a valid UTR, but no bank credit for it ever appears."
+  },
+  {
+    "order_id": "ORD1082",
+    "category": "short_settlement",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Settlement recorded with a valid UTR, but no bank credit for it ever appears."
+  },
+  {
+    "order_id": "ORD1083",
+    "category": "duplicate_credit",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "UTR UTR8612747444 was credited twice in the bank statement."
+  },
+  {
+    "order_id": "ORD1084",
+    "category": "duplicate_credit",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "UTR UTR8136179811 was credited twice in the bank statement."
+  },
+  {
+    "order_id": "ORD1085",
+    "category": "refund_clawback",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "REFUND_NO_MDR_REVERSAL",
+    "expected_delta_paise": 55552,
+    "notes": "Customer refund of Rs 555.52 debits revenue but does not reverse the MDR already deducted on the original gross amount."
+  },
+  {
+    "order_id": "ORD1086",
+    "category": "refund_clawback",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "REFUND_NO_MDR_REVERSAL",
+    "expected_delta_paise": 151729,
+    "notes": "Customer refund of Rs 1517.29 debits revenue but does not reverse the MDR already deducted on the original gross amount."
+  },
+  {
+    "order_id": "ORD1087",
+    "category": "refund_clawback",
+    "expected_resolution": "agent_resolved",
+    "expected_root_cause_code": "REFUND_NO_MDR_REVERSAL",
+    "expected_delta_paise": 53559,
+    "notes": "Customer refund of Rs 535.59 debits revenue but does not reverse the MDR already deducted on the original gross amount."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR8518238399",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR2444812497",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR6075963527",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR6756711494",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR3387104291",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR7040562787",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR8261111839",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR1074059253",
+    "category": "orphan",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Bank credit with no matching settlement anywhere in the batch."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR7792729530",
+    "category": "adversarial_trap",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Amount/date coincidentally close to ORD1045, but shares no real UTR or order linkage -- must not be force-matched."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR6715705115",
+    "category": "adversarial_trap",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Amount/date coincidentally close to ORD1034, but shares no real UTR or order linkage -- must not be force-matched."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR2079770569",
+    "category": "adversarial_trap",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Amount/date coincidentally close to ORD1018, but shares no real UTR or order linkage -- must not be force-matched."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR3964229896",
+    "category": "adversarial_trap",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Amount/date coincidentally close to ORD1021, but shares no real UTR or order linkage -- must not be force-matched."
+  },
+  {
+    "order_id": "UNMATCHED_BANK_UTR7858164010",
+    "category": "adversarial_trap",
+    "expected_resolution": "honest_exception",
+    "expected_root_cause_code": null,
+    "expected_delta_paise": null,
+    "notes": "Amount/date coincidentally close to ORD1048, but shares no real UTR or order linkage -- must not be force-matched."
+  }
+]

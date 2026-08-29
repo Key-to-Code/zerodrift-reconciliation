@@ -1,0 +1,560 @@
+[
+  {
+    "utr": "UTR3342331444",
+    "credited_amount": "1639.03",
+    "value_date": "2025-01-08",
+    "narration": "NEFT RZPYSETL UTR3342331444"
+  },
+  {
+    "utr": "UTR3585650756",
+    "credited_amount": "3090.62",
+    "value_date": "2025-01-08",
+    "narration": "NEFT RZPYSETL UTR3585650756"
+  },
+  {
+    "utr": "UTR4733616459",
+    "credited_amount": "1654.08",
+    "value_date": "2025-01-27",
+    "narration": "IMPS/RZPY/616459/xx"
+  },
+  {
+    "utr": "UTR2445662585",
+    "credited_amount": "4477.15",
+    "value_date": "2025-01-20",
+    "narration": "NEFT-UTR2445662585-SETTLE"
+  },
+  {
+    "utr": "UTR9776552803",
+    "credited_amount": "4726.94",
+    "value_date": "2025-01-20",
+    "narration": "UPI/RZPY/UTR9776552803/SETTLE"
+  },
+  {
+    "utr": "UTR1298737106",
+    "credited_amount": "4757.79",
+    "value_date": "2025-01-21",
+    "narration": "IMPS/RZPY/737106/xx"
+  },
+  {
+    "utr": "UTR6488854841",
+    "credited_amount": "2478.70",
+    "value_date": "2025-01-10",
+    "narration": "RZPY SETTLEMENT UTR UTR6488854841 REF4841"
+  },
+  {
+    "utr": "UTR3783290795",
+    "credited_amount": "4175.37",
+    "value_date": "2025-01-20",
+    "narration": "NEFT RZPYSETL UTR3783290795"
+  },
+  {
+    "utr": "UTR6924716023",
+    "credited_amount": "2868.91",
+    "value_date": "2025-01-27",
+    "narration": "NEFT RZPYSETL UTR6924716023"
+  },
+  {
+    "utr": "UTR8752612686",
+    "credited_amount": "667.62",
+    "value_date": "2025-01-17",
+    "narration": "UPI/RZPY/UTR8752612686/SETTLE"
+  },
+  {
+    "utr": "UTR7439149233",
+    "credited_amount": "2147.66",
+    "value_date": "2025-01-13",
+    "narration": "UPI/RZPY/UTR7439149233/SETTLE"
+  },
+  {
+    "utr": "UTR7805745017",
+    "credited_amount": "3322.46",
+    "value_date": "2025-01-13",
+    "narration": "NEFT RZPYSETL UTR7805745017"
+  },
+  {
+    "utr": "UTR4246059658",
+    "credited_amount": "975.64",
+    "value_date": "2025-01-14",
+    "narration": "NEFT-UTR4246059658-SETTLE"
+  },
+  {
+    "utr": "UTR6947530309",
+    "credited_amount": "832.23",
+    "value_date": "2025-01-13",
+    "narration": "NEFT RZPYSETL UTR6947530309"
+  },
+  {
+    "utr": "UTR8519962896",
+    "credited_amount": "543.11",
+    "value_date": "2025-01-24",
+    "narration": "RZPY SETTLEMENT UTR UTR8519962896 REF2896"
+  },
+  {
+    "utr": "UTR4919706735",
+    "credited_amount": "4281.55",
+    "value_date": "2025-01-20",
+    "narration": "RZPY SETTLEMENT UTR UTR4919706735 REF6735"
+  },
+  {
+    "utr": "UTR4274958945",
+    "credited_amount": "2428.89",
+    "value_date": "2025-01-24",
+    "narration": "NEFT RZPYSETL UTR4274958945"
+  },
+  {
+    "utr": "UTR1083651970",
+    "credited_amount": "2968.32",
+    "value_date": "2025-01-24",
+    "narration": "RZPY SETTLEMENT UTR UTR1083651970 REF1970"
+  },
+  {
+    "utr": "UTR5067116918",
+    "credited_amount": "1740.30",
+    "value_date": "2025-02-04",
+    "narration": "NEFT-UTR5067116918-SETTLE"
+  },
+  {
+    "utr": "UTR1540137296",
+    "credited_amount": "4489.34",
+    "value_date": "2025-02-04",
+    "narration": "UPI/RZPY/UTR1540137296/SETTLE"
+  },
+  {
+    "utr": "UTR6633778586",
+    "credited_amount": "3568.04",
+    "value_date": "2025-01-14",
+    "narration": "RZPY SETTLEMENT UTR UTR6633778586 REF8586"
+  },
+  {
+    "utr": "UTR5569956444",
+    "credited_amount": "1646.68",
+    "value_date": "2025-01-24",
+    "narration": "NEFT-UTR5569956444-SETTLE"
+  },
+  {
+    "utr": "UTR1252860896",
+    "credited_amount": "855.90",
+    "value_date": "2025-01-15",
+    "narration": "NEFT-UTR1252860896-SETTLE"
+  },
+  {
+    "utr": "UTR3084839399",
+    "credited_amount": "1694.50",
+    "value_date": "2025-02-04",
+    "narration": "NEFT RZPYSETL UTR3084839399"
+  },
+  {
+    "utr": "UTR2748309234",
+    "credited_amount": "4609.05",
+    "value_date": "2025-01-27",
+    "narration": "NEFT-UTR2748309234-SETTLE"
+  },
+  {
+    "utr": "UTR9822598054",
+    "credited_amount": "2945.60",
+    "value_date": "2025-01-20",
+    "narration": "NEFT-UTR9822598054-SETTLE"
+  },
+  {
+    "utr": "UTR2067970820",
+    "credited_amount": "1071.81",
+    "value_date": "2025-01-30",
+    "narration": "IMPS/RZPY/970820/xx"
+  },
+  {
+    "utr": "UTR4965395580",
+    "credited_amount": "2870.79",
+    "value_date": "2025-01-14",
+    "narration": "UPI/RZPY/UTR4965395580/SETTLE"
+  },
+  {
+    "utr": "UTR4590711152",
+    "credited_amount": "3868.95",
+    "value_date": "2025-02-04",
+    "narration": "NEFT-UTR4590711152-SETTLE"
+  },
+  {
+    "utr": "UTR3067418686",
+    "credited_amount": "2953.24",
+    "value_date": "2025-02-04",
+    "narration": "UPI/RZPY/UTR3067418686/SETTLE"
+  },
+  {
+    "utr": "UTR8667072205",
+    "credited_amount": "1832.76",
+    "value_date": "2025-01-14",
+    "narration": "RZPY SETTLEMENT UTR UTR8667072205 REF2205"
+  },
+  {
+    "utr": "UTR1664847319",
+    "credited_amount": "2994.49",
+    "value_date": "2025-01-31",
+    "narration": "RZPY SETTLEMENT UTR UTR1664847319 REF7319"
+  },
+  {
+    "utr": "UTR8507497883",
+    "credited_amount": "818.77",
+    "value_date": "2025-01-08",
+    "narration": "NEFT-UTR8507497883-SETTLE"
+  },
+  {
+    "utr": "UTR1676168421",
+    "credited_amount": "3281.35",
+    "value_date": "2025-01-22",
+    "narration": "NEFT RZPYSETL UTR1676168421"
+  },
+  {
+    "utr": "UTR4701485292",
+    "credited_amount": "4036.01",
+    "value_date": "2025-01-13",
+    "narration": "UPI/RZPY/UTR4701485292/SETTLE"
+  },
+  {
+    "utr": "UTR3660223333",
+    "credited_amount": "707.65",
+    "value_date": "2025-01-27",
+    "narration": "UPI/RZPY/UTR3660223333/SETTLE"
+  },
+  {
+    "utr": "UTR8370987661",
+    "credited_amount": "1856.48",
+    "value_date": "2025-01-28",
+    "narration": "IMPS/RZPY/987661/xx"
+  },
+  {
+    "utr": "UTR1311570307",
+    "credited_amount": "2894.27",
+    "value_date": "2025-01-13",
+    "narration": "UPI/RZPY/UTR1311570307/SETTLE"
+  },
+  {
+    "utr": "UTR7467725516",
+    "credited_amount": "1587.29",
+    "value_date": "2025-01-28",
+    "narration": "IMPS/RZPY/725516/xx"
+  },
+  {
+    "utr": "UTR3271782991",
+    "credited_amount": "1286.56",
+    "value_date": "2025-01-10",
+    "narration": "NEFT RZPYSETL UTR3271782991"
+  },
+  {
+    "utr": "UTR3376077463",
+    "credited_amount": "1884.67",
+    "value_date": "2025-01-28",
+    "narration": "RZPY SETTLEMENT UTR UTR3376077463 REF7463"
+  },
+  {
+    "utr": "UTR7393195616",
+    "credited_amount": "4100.36",
+    "value_date": "2025-01-13",
+    "narration": "NEFT-UTR7393195616-SETTLE"
+  },
+  {
+    "utr": "UTR4311931853",
+    "credited_amount": "2246.54",
+    "value_date": "2025-01-20",
+    "narration": "RZPY SETTLEMENT UTR UTR4311931853 REF1853"
+  },
+  {
+    "utr": "UTR1041531046",
+    "credited_amount": "3437.32",
+    "value_date": "2025-01-21",
+    "narration": "NEFT-UTR1041531046-SETTLE"
+  },
+  {
+    "utr": "UTR3373077218",
+    "credited_amount": "4726.97",
+    "value_date": "2025-01-30",
+    "narration": "UPI/RZPY/UTR3373077218/SETTLE"
+  },
+  {
+    "utr": "UTR2536778950",
+    "credited_amount": "4669.30",
+    "value_date": "2025-01-16",
+    "narration": "IMPS/RZPY/778950/xx"
+  },
+  {
+    "utr": "UTR4218981849",
+    "credited_amount": "2615.54",
+    "value_date": "2025-01-21",
+    "narration": "IMPS/RZPY/981849/xx"
+  },
+  {
+    "utr": "UTR9265609985",
+    "credited_amount": "621.89",
+    "value_date": "2025-02-04",
+    "narration": "UPI/RZPY/UTR9265609985/SETTLE"
+  },
+  {
+    "utr": "UTR4011966884",
+    "credited_amount": "1874.52",
+    "value_date": "2025-02-04",
+    "narration": "UPI/RZPY/UTR4011966884/SETTLE"
+  },
+  {
+    "utr": "UTR9239688178",
+    "credited_amount": "4720.06",
+    "value_date": "2025-02-04",
+    "narration": "RZPY SETTLEMENT UTR UTR9239688178 REF8178"
+  },
+  {
+    "utr": "UTR6124453431",
+    "credited_amount": "3956.51",
+    "value_date": "2025-02-03",
+    "narration": "RZPY SETTLEMENT UTR UTR6124453431 REF3431"
+  },
+  {
+    "utr": "UTR7597996327",
+    "credited_amount": "3167.58",
+    "value_date": "2025-01-09",
+    "narration": "NEFT-UTR7597996327-SETTLE"
+  },
+  {
+    "utr": "UTR7161404428",
+    "credited_amount": "699.87",
+    "value_date": "2025-01-15",
+    "narration": "RZPY SETTLEMENT UTR UTR7161404428 REF4428"
+  },
+  {
+    "utr": "UTR5791662169",
+    "credited_amount": "10556.91",
+    "value_date": "2025-01-24",
+    "narration": "UPI/RZPY/UTR5791662169/SETTLE"
+  },
+  {
+    "utr": "UTR9249648005",
+    "credited_amount": "9652.08",
+    "value_date": "2025-01-28",
+    "narration": "RZPY SETTLEMENT UTR UTR9249648005 REF8005"
+  },
+  {
+    "utr": "UTR3381183483",
+    "credited_amount": "6407.10",
+    "value_date": "2025-01-17",
+    "narration": "NEFT RZPYSETL UTR3381183483"
+  },
+  {
+    "utr": "UTR6679017210",
+    "credited_amount": "2718.60",
+    "value_date": "2025-01-20",
+    "narration": "UPI/RZPY/UTR6679017210/SETTLE"
+  },
+  {
+    "utr": "UTR5659161352",
+    "credited_amount": "4574.28",
+    "value_date": "2025-01-15",
+    "narration": "NEFT RZPYSETL UTR5659161352"
+  },
+  {
+    "utr": "UTR2333241445",
+    "credited_amount": "4763.49",
+    "value_date": "2025-01-29",
+    "narration": "IMPS/RZPY/241445/xx"
+  },
+  {
+    "utr": "UTR5607762160",
+    "credited_amount": "3701.13",
+    "value_date": "2025-01-09",
+    "narration": "UPI/RZPY/UTR5607762160/SETTLE"
+  },
+  {
+    "utr": "UTR6944142262",
+    "credited_amount": "4097.77",
+    "value_date": "2025-01-29",
+    "narration": "UPI/RZPY/UTR6944142262/SETTLE"
+  },
+  {
+    "utr": "UTR7519578899",
+    "credited_amount": "1544.43",
+    "value_date": "2025-02-04",
+    "narration": "NEFT-UTR7519578899-SETTLE"
+  },
+  {
+    "utr": "UTR8995059760",
+    "credited_amount": "3768.04",
+    "value_date": "2025-01-23",
+    "narration": "UPI/RZPY/UTR8995059760/SETTLE"
+  },
+  {
+    "utr": "UTR7533932947",
+    "credited_amount": "4310.71",
+    "value_date": "2025-02-04",
+    "narration": "IMPS/RZPY/932947/xx"
+  },
+  {
+    "utr": "UTR3319936135",
+    "credited_amount": "2133.42",
+    "value_date": "2025-01-30",
+    "narration": "IMPS/RZPY/936135/xx"
+  },
+  {
+    "utr": "UTR7296096954",
+    "credited_amount": "2486.24",
+    "value_date": "2025-01-31",
+    "narration": "NEFT-UTR7296096954-SETTLE"
+  },
+  {
+    "utr": "UTR7767538527",
+    "credited_amount": "4721.70",
+    "value_date": "2025-01-21",
+    "narration": "UPI/RZPY/UTR7767538527/SETTLE"
+  },
+  {
+    "utr": "UTR6242173772",
+    "credited_amount": "4597.94",
+    "value_date": "2025-01-17",
+    "narration": "IMPS/RZPY/173772/xx"
+  },
+  {
+    "utr": "UTR1116402431",
+    "credited_amount": "3902.64",
+    "value_date": "2025-01-23",
+    "narration": "UPI/RZPY/UTR1116402431/SETTLE"
+  },
+  {
+    "utr": "UTR6204041308",
+    "credited_amount": "2158.64",
+    "value_date": "2025-01-14",
+    "narration": "RZPY SETTLEMENT UTR UTR6204041308 REF1308"
+  },
+  {
+    "utr": "UTR3019952485",
+    "credited_amount": "905.25",
+    "value_date": "2025-01-16",
+    "narration": "NEFT RZPYSETL UTR3019952485"
+  },
+  {
+    "utr": "UTR2062073697",
+    "credited_amount": "3870.85",
+    "value_date": "2025-01-15",
+    "narration": "NEFT-UTR2062073697-SETTLE"
+  },
+  {
+    "utr": "UTR5070585433",
+    "credited_amount": "3440.50",
+    "value_date": "2025-01-14",
+    "narration": "UPI/RZPY/UTR5070585433/SETTLE"
+  },
+  {
+    "utr": "UTR8612747444",
+    "credited_amount": "4077.58",
+    "value_date": "2025-02-04",
+    "narration": "NEFT RZPYSETL UTR8612747444"
+  },
+  {
+    "utr": "UTR8612747444",
+    "credited_amount": "4077.58",
+    "value_date": "2025-02-04",
+    "narration": "NEFT-UTR8612747444-SETTLE"
+  },
+  {
+    "utr": "UTR8136179811",
+    "credited_amount": "2730.22",
+    "value_date": "2025-01-28",
+    "narration": "NEFT-UTR8136179811-SETTLE"
+  },
+  {
+    "utr": "UTR8136179811",
+    "credited_amount": "2730.22",
+    "value_date": "2025-01-28",
+    "narration": "NEFT RZPYSETL UTR8136179811"
+  },
+  {
+    "utr": "UTR5952059278",
+    "credited_amount": "1033.63",
+    "value_date": "2025-01-08",
+    "narration": "IMPS/RZPY/059278/xx"
+  },
+  {
+    "utr": "UTR8622026979",
+    "credited_amount": "3220.26",
+    "value_date": "2025-01-16",
+    "narration": "UPI/RZPY/UTR8622026979/SETTLE"
+  },
+  {
+    "utr": "UTR5667181604",
+    "credited_amount": "1764.22",
+    "value_date": "2025-01-28",
+    "narration": "UPI/RZPY/UTR5667181604/SETTLE"
+  },
+  {
+    "utr": "UTR8518238399",
+    "credited_amount": "3487.65",
+    "value_date": "2025-01-25",
+    "narration": "UPI/RZPY/UTR8518238399/SETTLE"
+  },
+  {
+    "utr": "UTR2444812497",
+    "credited_amount": "3091.58",
+    "value_date": "2025-02-02",
+    "narration": "RZPY SETTLEMENT UTR UTR2444812497 REF2497"
+  },
+  {
+    "utr": "UTR6075963527",
+    "credited_amount": "1612.11",
+    "value_date": "2025-01-17",
+    "narration": "RZPY SETTLEMENT UTR UTR6075963527 REF3527"
+  },
+  {
+    "utr": "UTR6756711494",
+    "credited_amount": "3625.56",
+    "value_date": "2025-01-28",
+    "narration": "RZPY SETTLEMENT UTR UTR6756711494 REF1494"
+  },
+  {
+    "utr": "UTR3387104291",
+    "credited_amount": "3208.61",
+    "value_date": "2025-01-12",
+    "narration": "NEFT-UTR3387104291-SETTLE"
+  },
+  {
+    "utr": "UTR7040562787",
+    "credited_amount": "3410.72",
+    "value_date": "2025-01-30",
+    "narration": "IMPS/RZPY/562787/xx"
+  },
+  {
+    "utr": "UTR8261111839",
+    "credited_amount": "3886.39",
+    "value_date": "2025-01-28",
+    "narration": "UPI/RZPY/UTR8261111839/SETTLE"
+  },
+  {
+    "utr": "UTR1074059253",
+    "credited_amount": "2042.64",
+    "value_date": "2025-01-13",
+    "narration": "UPI/RZPY/UTR1074059253/SETTLE"
+  },
+  {
+    "utr": "UTR7792729530",
+    "credited_amount": "4726.21",
+    "value_date": "2025-01-30",
+    "narration": "NEFT RZPYSETL UTR7792729530"
+  },
+  {
+    "utr": "UTR6715705115",
+    "credited_amount": "3281.11",
+    "value_date": "2025-01-23",
+    "narration": "UPI/RZPY/UTR6715705115/SETTLE"
+  },
+  {
+    "utr": "UTR2079770569",
+    "credited_amount": "2967.88",
+    "value_date": "2025-01-23",
+    "narration": "IMPS/RZPY/770569/xx"
+  },
+  {
+    "utr": "UTR3964229896",
+    "credited_amount": "3566.65",
+    "value_date": "2025-01-13",
+    "narration": "IMPS/RZPY/229896/xx"
+  },
+  {
+    "utr": "UTR7858164010",
+    "credited_amount": "622.36",
+    "value_date": "2025-02-03",
+    "narration": "IMPS/RZPY/164010/xx"
+  }
+]

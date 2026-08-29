@@ -258,6 +258,77 @@ absorb the extra 3, keeping the total at 100).
 
 ---
 
+## Layer 1 Addendum — clarifications resolved before implementation (2026-08-29)
+
+Six ambiguities were raised against the spec above and resolved as follows. These
+resolutions are binding for the generator and model implementation; if a later layer
+needs to revisit one, flag it explicitly rather than silently diverging.
+
+**A1 — `missing_tax_line` vs. the `net_amount` exact-invariant validator.**
+The model validator (`net_amount == gross - mdr - gst - tds`, zero tolerance) cannot be
+relaxed, so a "missing tax line" cannot mean "the line is zeroed but net_amount still
+reflects the true deduction" — that record would fail to construct at all. Resolution:
+the anomaly is modeled as a genuine settlement computation error — the omitted tax truly
+was not deducted, so `net_amount` is recomputed consistent with the zeroed line (the
+merchant was overpaid by that tax amount). The record stays internally consistent with
+the invariant; the discrepancy is that it's inconsistent with the *expected* tax rules
+(GST 18% / TDS 0.1%), which is what the fast path / agent must catch by recomputing the
+expected values and comparing.
+
+**A2 — `refund_clawback` record shape.** No new top-level schema. Add an optional
+`refund_amount: Decimal | None = None` field to `InternalOrder` (same `Decimal`-from-str
+discipline as other money fields; when set, must be strictly positive and less than
+`gross_amount`). A record with `refund_amount` set is the `refund_clawback` category. The
+corresponding `GatewaySettlement` is unaffected by the refund (MDR/GST/TDS computed on
+the original gross amount, never reversed) — this is what makes the category meaningful.
+Ledger-level handling of this field is Layer 3's concern; Layer 1 only needs to generate
+and label the data correctly.
+
+**A3 — `INTL_MARKUP` / "corporate card" fee drift needs an international marker.**
+Add `is_international: bool = False` to `GatewaySettlement`. `fee_drift` records may set
+this on `amex` or `credit_card` rails to justify an additional markup on top of the
+standard rate table, consistent with the `AMEX_SURCHARGE` / `INTL_MARKUP` root-cause
+codes in Layer 4. No new payment methods are added — `payment_method` stays exactly the
+five-value literal from §1.3.
+
+**A4 — Ground-truth keying for order-less anomalies.** `orphan` records (a bank credit
+with no settlement or order behind it at all) get a synthetic identifier of the form
+`UNMATCHED_BANK_<utr>` in place of `order_id` in their `ground_truth.json` entry. This
+prefix is reserved — no real `InternalOrder.order_id` may ever start with
+`UNMATCHED_BANK_`, enforced as a generator-level test.
+
+**A5 — Dataset date range and holiday list, fixed in code (not wall-clock-derived).**
+Because determinism (criterion 2) requires byte-identical output for a given seed
+regardless of *when* the generator is run, all dates are anchored to a fixed window
+hardcoded in `src/data/generator.py`, never to `date.today()`: **2025-01-06 through
+2025-02-02** (four weeks, includes at least one full weekend-crossing window for
+`cutoff_drift`). `src/common/calendar.py`'s hardcoded Indian bank holiday list covers
+2025: Republic Day (2025-01-26, falls on a Sunday), Independence Day (2025-08-15),
+Gandhi Jayanti (2025-10-02), Diwali (2025-10-20). The list exists mainly to prove the
+calendar logic correctly excludes a holiday that *isn't* already a weekend — Independence
+Day 2025-08-15 is a Friday — even though that date falls outside the generator's own
+batch window.
+
+**A6 — `adversarial_trap`'s `expected_resolution`.** Confirmed as `honest_exception` for
+all 5 records, consistent with `orphan`, `short_settlement`, and `duplicate_credit`.
+
+**Category mix, recomputed with `refund_clawback` included (A2), total still 100:**
+
+| Category | Count |
+|---|---|
+| clean_match | 53 |
+| utr_batch | 10 |
+| cutoff_drift | 5 |
+| fee_drift | 7 |
+| missing_tax_line | 5 |
+| orphan | 8 |
+| adversarial_trap | 5 |
+| short_settlement | 2 |
+| duplicate_credit | 2 |
+| refund_clawback | 3 |
+
+---
+
 ## Layer 2 — Fast path: Polars matching cascade
 
 ### 2.1 `src/matching/schema.py`
