@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: finance_controller
+    ports:
+      # Host 5433 -> container 5432. Mapped off the default port because a
+      # native Postgres install may already be listening on host 5432.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

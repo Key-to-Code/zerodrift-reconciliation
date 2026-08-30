@@ -1,0 +1,9 @@
+polars
+pydantic
+pydantic-settings
+rapidfuzz
+pytest
+rich
+python-dateutil
+sqlalchemy
+psycopg[binary]
