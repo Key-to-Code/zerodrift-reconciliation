@@ -59,7 +59,9 @@ from src.agent.graph import (
     MAX_TOOL_CALLS,
     _invoke_tool_logic,
     _propose_resolution_logic,
+    gatekeeper_check,
 )
+from src.agent.resolution import AgentResolution
 from src.agent.run_log import diagnose_or_replay
 from src.data.models import BankStatementLine, GatewaySettlement, GroundTruthEntry, InternalOrder
 from src.matching.schema import bank_lines_to_frame, orders_to_frame, settlements_to_frame
@@ -158,6 +160,7 @@ def _fresh_state(**overrides) -> AgentState:
         "resolution": None,
         "status": "PROCESSING",
         "raw_failure": None,
+        "tokens_used": 0,
     }
     base.update(overrides)
     return base
@@ -456,6 +459,115 @@ def test_invoke_tool_reraises_unrelated_api_errors():
     state = _fresh_state()
     with pytest.raises(BadRequestError):
         _invoke_tool_logic(state, _StubModel())
+
+
+def test_gatekeeper_rejects_evidence_not_backed_by_real_tool_history():
+    """Layer 4 review finding #2, fixed at AGENT_LOGIC_VERSION 6:
+    gatekeeper_check must trust state["tool_call_history"] (the graph's own
+    authoritative record of what invoke_tool actually executed), never
+    resolution.evidence_tool_calls (a field the model fills in itself inside
+    its final JSON answer and could fabricate independently of what it
+    actually called). No network call -- gatekeeper_check is pure
+    state-in/state-out, no model involved."""
+    fabricated_resolution = AgentResolution(
+        root_cause_code="AMEX_SURCHARGE",
+        quantified_delta_paise=1000,
+        evidence_tool_calls=["get_tax_rules"],
+        confidence_note="claims evidence it never actually gathered",
+    )
+
+    # Case 1: model claims evidence_tool_calls=["get_tax_rules"] but the
+    # graph's real tool_call_history is entirely empty -- no tool was ever
+    # called for this record at all.
+    empty_history_state = _fresh_state(
+        status="PROCESSING", resolution=fabricated_resolution, tool_call_history=[]
+    )
+    result = gatekeeper_check(empty_history_state)
+    assert result["status"] == "HONEST_EXCEPTION", (
+        "a non-UNRESOLVED resolution with zero real tool calls must not be postable, "
+        "regardless of what evidence_tool_calls claims"
+    )
+    assert "gatekeeper_rejected" in result["raw_failure"]
+
+    # Case 2: real tool_call_history is non-empty (a different tool was
+    # genuinely called) but doesn't contain the specific tool claimed as
+    # evidence -- the claimed evidence is still fabricated even though some
+    # real tool activity happened.
+    wrong_tool_state = _fresh_state(
+        status="PROCESSING",
+        resolution=fabricated_resolution,
+        tool_call_history=[{"name": "check_settlement_timing", "args": {}, "result": {}}],
+    )
+    result2 = gatekeeper_check(wrong_tool_state)
+    assert result2["status"] == "HONEST_EXCEPTION", (
+        "claimed evidence_tool_calls must be a subset of the tools actually recorded "
+        "in state['tool_call_history'], not merely 'some tool was called'"
+    )
+    assert "gatekeeper_rejected" in result2["raw_failure"]
+
+    # Control: real tool_call_history genuinely contains the claimed tool ->
+    # must be accepted, proving the fix isn't just rejecting everything.
+    real_history_state = _fresh_state(
+        status="PROCESSING",
+        resolution=fabricated_resolution,
+        tool_call_history=[{"name": "get_tax_rules", "args": {}, "result": {}}],
+    )
+    result3 = gatekeeper_check(real_history_state)
+    assert result3["status"] == "RESOLVED"
+
+
+def test_tokens_used_summed_from_real_usage_metadata():
+    """Budgeting fix: debug_info['tokens_used'] (surfaced via
+    diagnose_discrepancy) must be the real Groq-reported usage.total_tokens
+    summed across every model call made for a record, not an estimate.
+    Exercises both _invoke_tool_logic (one tool hop) and
+    _propose_resolution_logic (a malformed-then-valid retry) accumulating
+    into the same running total via stub AIMessages carrying
+    usage_metadata -- no network call, so the number asserted here isn't
+    itself a live cost."""
+
+    class _ToolStubModel:
+        def invoke(self, messages):
+            return AIMessage(
+                content="",
+                tool_calls=[{"name": "get_tax_rules", "args": {"as_of": "2025-01-01"}, "id": "call_1"}],
+                usage_metadata={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+            )
+
+    state_after_tool = _invoke_tool_logic(_fresh_state(), _ToolStubModel())
+    assert state_after_tool["tokens_used"] == 150
+
+    propose_calls: list[int] = []
+
+    class _ProposeStubModel:
+        def invoke(self, messages):
+            propose_calls.append(1)
+            if len(propose_calls) == 1:
+                return AIMessage(
+                    content="not valid json",
+                    usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+                )
+            good_json = json.dumps(
+                {
+                    "root_cause_code": "UNRESOLVED",
+                    "quantified_delta_paise": 0,
+                    "evidence_tool_calls": [],
+                    "confidence_note": "ok",
+                }
+            )
+            return AIMessage(
+                content=good_json,
+                usage_metadata={"input_tokens": 20, "output_tokens": 10, "total_tokens": 30},
+            )
+
+    # Chained onto state_after_tool -- proves accumulation carries across
+    # nodes within one record's diagnostic run, not just within one call.
+    final_state = _propose_resolution_logic(state_after_tool, _ProposeStubModel())
+    assert final_state["status"] == "RESOLVED"
+    assert final_state["tokens_used"] == 150 + 15 + 30, (
+        "must equal the tool-hop cost plus BOTH propose_resolution attempts "
+        "(the failed first try's tokens were still real Groq spend, not free)"
+    )
 
 
 # ---------------------------------------------------------------------------

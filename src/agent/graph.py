@@ -60,6 +60,21 @@ GROQ_MODEL = "openai/gpt-oss-120b"
 # version -- see that module's docstring for why (Groq's free-tier daily
 # token cap makes blind re-running of the full live suite unsustainable).
 #
+# BEFORE spending any live budget on a bump: if the change is to pure
+# post-processing logic that never touches SYSTEM_PROMPT,
+# FINAL_ANSWER_INSTRUCTION, a tool's behavior, or the model (e.g. a
+# gatekeeper_check rule, JSON parsing, retry/backoff logic), first replay
+# every cached entry's debug_info["tool_call_history"] through the new logic
+# offline (zero API calls) and check whether any status/resolution would
+# change. Only fall through to a live re-run if that replay can't settle the
+# question -- e.g. the fix depends on something the old cache never recorded,
+# or the change does touch model-facing behavior. The v6 gatekeeper fix
+# below is the worked example: an offline replay against all 37 cached
+# entries found 0 flips, and that alone was accepted as sufficient
+# confirmation the fix was safe (one live canary run followed only to sanity
+# check the pipeline end-to-end, not to re-prove correctness the offline
+# check had already shown).
+#
 # v2: get_tax_rules/check_settlement_timing now compute expected tax paise /
 # actual business-day gap directly (see tools.py), instead of leaving that
 # arithmetic to the model -- fixes 2 of 3 correctness failures found in v1's
@@ -113,7 +128,18 @@ GROQ_MODEL = "openai/gpt-oss-120b"
 # semantics, not an arithmetic error. Fixed by adding an explicit definition
 # to SYSTEM_PROMPT: the code is keyed to expected_window_business_days, never
 # to actual_gap_business_days.
-AGENT_LOGIC_VERSION = 5
+#
+# v6 (this bump): code-review finding, not a live-run failure -- gatekeeper_check
+# was trusting resolution.evidence_tool_calls (a field the model fills in itself
+# inside its own final JSON answer) to decide whether a non-UNRESOLVED resolution
+# is backed by real evidence, instead of state["tool_call_history"] (the graph's
+# own authoritative record of what invoke_tool actually executed). A model could
+# claim evidence_tool_calls=["get_tax_rules"] without ever having called it, and
+# the old gatekeeper would post it as RESOLVED anyway. Fixed by checking
+# state["tool_call_history"] directly, and rejecting if the claimed tool names
+# aren't a subset of what was actually called -- see
+# test_gatekeeper_rejects_evidence_not_backed_by_real_tool_history.
+AGENT_LOGIC_VERSION = 6
 
 # Proactive pacing ahead of every REAL model call (not applied to the
 # deterministic _logic functions below, which tests call directly without a
@@ -210,6 +236,7 @@ class AgentState(TypedDict):
     resolution: AgentResolution | None
     status: str
     raw_failure: str | None
+    tokens_used: int
 
 
 def _build_model():
@@ -238,6 +265,17 @@ def _invoke_with_backoff(model, messages, max_retries: int = 4):
                 time.sleep(5 * (attempt + 1))
                 continue
             raise
+
+
+def _response_tokens(response) -> int:
+    """Real token cost of one model call, from Groq's own usage accounting
+    (langchain_groq populates AIMessage.usage_metadata from the API
+    response) -- not an estimate. Returns 0 for a stub/test AIMessage built
+    without usage_metadata (the deterministic _logic tests never touch the
+    network, so there's genuinely nothing to report there), and for any
+    response type that doesn't carry it."""
+    usage = getattr(response, "usage_metadata", None)
+    return usage.get("total_tokens", 0) if usage else 0
 
 
 def _record_to_prompt(record: DiscrepancyRecord) -> str:
@@ -270,10 +308,11 @@ def _invoke_tool_logic(state: AgentState, model) -> AgentState:
             return {**state, "status": "READY_TO_PROPOSE"}
         raise
 
+    tokens_used = state.get("tokens_used", 0) + _response_tokens(response)
     messages = state["messages"] + [response]
 
     if not response.tool_calls or state["hop_count"] >= state["max_hops"]:
-        return {**state, "messages": messages, "status": "READY_TO_PROPOSE"}
+        return {**state, "messages": messages, "status": "READY_TO_PROPOSE", "tokens_used": tokens_used}
 
     hop_count = state["hop_count"]
     tool_call_history = list(state["tool_call_history"])
@@ -292,6 +331,7 @@ def _invoke_tool_logic(state: AgentState, model) -> AgentState:
         "hop_count": hop_count,
         "tool_call_history": tool_call_history,
         "status": "PROCESSING",
+        "tokens_used": tokens_used,
     }
 
 
@@ -309,13 +349,21 @@ def _route_after_tool(state: AgentState) -> str:
 
 def _propose_resolution_logic(state: AgentState, model) -> AgentState:
     messages = state["messages"] + [HumanMessage(content=FINAL_ANSWER_INSTRUCTION)]
+    tokens_used = state.get("tokens_used", 0)
 
     for attempt in range(2):
         response = _invoke_with_backoff(model, messages)
+        tokens_used += _response_tokens(response)
         raw = response.content if isinstance(response.content, str) else str(response.content)
         try:
             resolution = AgentResolution.model_validate_json(_extract_json(raw))
-            return {**state, "resolution": resolution, "status": "RESOLVED", "messages": messages + [response]}
+            return {
+                **state,
+                "resolution": resolution,
+                "status": "RESOLVED",
+                "messages": messages + [response],
+                "tokens_used": tokens_used,
+            }
         except (ValidationError, ValueError, json.JSONDecodeError) as exc:
             if attempt == 0:
                 messages = messages + [
@@ -332,8 +380,9 @@ def _propose_resolution_logic(state: AgentState, model) -> AgentState:
                 **state,
                 "status": "HONEST_EXCEPTION",
                 "raw_failure": f"malformed_output_after_retry: {exc}\nraw_response: {raw!r}",
+                "tokens_used": tokens_used,
             }
-    return {**state, "status": "HONEST_EXCEPTION", "raw_failure": "unreachable"}
+    return {**state, "status": "HONEST_EXCEPTION", "raw_failure": "unreachable", "tokens_used": tokens_used}
 
 
 def propose_resolution(state: AgentState) -> AgentState:
@@ -354,15 +403,24 @@ def gatekeeper_check(state: AgentState) -> AgentState:
     if state["status"] == "HONEST_EXCEPTION":
         return state
     resolution = state["resolution"]
-    # A resolution that claims a real root cause but cites no tool evidence
-    # is not postable -- fall back to honest_exception rather than let an
-    # unsupported claim through. (Design decision, not in the plan's literal
-    # text; flagged here rather than added silently.)
-    if resolution.root_cause_code != "UNRESOLVED" and not resolution.evidence_tool_calls:
+    # A resolution that claims a real root cause must be backed by tools the
+    # graph itself actually invoked. state["tool_call_history"] is the
+    # authoritative record -- built by _invoke_tool_logic from real tool
+    # executions -- never resolution.evidence_tool_calls, which is just the
+    # model's own self-report inside its final JSON answer and could claim a
+    # tool it never actually called (Layer 4 review finding #2). (Design
+    # decision, not in the plan's literal text; flagged here rather than
+    # added silently.)
+    actually_called = {call["name"] for call in state["tool_call_history"]}
+    claimed_but_not_called = set(resolution.evidence_tool_calls) - actually_called
+    if resolution.root_cause_code != "UNRESOLVED" and (not actually_called or claimed_but_not_called):
         return {
             **state,
             "status": "HONEST_EXCEPTION",
-            "raw_failure": "gatekeeper_rejected: non-UNRESOLVED resolution with no evidence_tool_calls",
+            "raw_failure": (
+                "gatekeeper_rejected: non-UNRESOLVED resolution not backed by state['tool_call_history'] "
+                f"(actually_called={sorted(actually_called)}, claimed={resolution.evidence_tool_calls})"
+            ),
         }
     final_status = "HONEST_EXCEPTION" if resolution.root_cause_code == "UNRESOLVED" else "RESOLVED"
     return {**state, "status": final_status}
@@ -392,8 +450,16 @@ def diagnose_discrepancy(record: DiscrepancyRecord) -> tuple[AgentResolution, di
     """Runs the bounded diagnostic loop for exactly one record, in total
     isolation from any other record (fresh state dict every call -- no
     cross-record memory). Returns (resolution, debug_info) where debug_info
-    carries hop_count/tool_call_history/status/raw_failure for logging and
-    test assertions.
+    carries hop_count/tool_call_history/status/raw_failure/tokens_used for
+    logging and test assertions.
+
+    tokens_used is real usage.total_tokens summed across every live model
+    call made for this record (classify+invoke_tool hops and both
+    propose_resolution attempts), read from Groq's own response accounting
+    -- never estimated. This is what makes a real "how much have we actually
+    spent" answer possible by summing data/agent_runs/*.jsonl, instead of
+    the ~4,400/~11,700-per-record-run *estimates* the project ran on before
+    this was added (see AGENT_LOGIC_VERSION's docstring history above).
     """
     global _diagnostic_workflow
     if _diagnostic_workflow is None:
@@ -408,6 +474,7 @@ def diagnose_discrepancy(record: DiscrepancyRecord) -> tuple[AgentResolution, di
         "resolution": None,
         "status": "PROCESSING",
         "raw_failure": None,
+        "tokens_used": 0,
     }
     final_state = _diagnostic_workflow.invoke(initial_state)
 
@@ -426,5 +493,6 @@ def diagnose_discrepancy(record: DiscrepancyRecord) -> tuple[AgentResolution, di
         "tool_call_history": final_state["tool_call_history"],
         "status": final_state["status"],
         "raw_failure": final_state.get("raw_failure"),
+        "tokens_used": final_state.get("tokens_used", 0),
     }
     return resolution, debug_info

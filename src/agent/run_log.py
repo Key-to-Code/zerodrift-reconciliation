@@ -77,6 +77,18 @@ def load_run_log(log_path: Path) -> dict[str, dict]:
     return latest
 
 
+def total_tokens_used(log_path: Path) -> int:
+    """Real cumulative Groq spend across every record's latest cache entry
+    -- sums debug_info['tokens_used'] (src/agent/graph.py's per-record
+    total, itself summed from Groq's own usage.total_tokens on each live
+    call). Entries logged before this field existed contribute 0, not a
+    fabricated backfilled estimate -- they were genuinely never measured.
+    This is the answer to "how much have we actually spent," replacing the
+    ~4,400/~11,700-per-record-run *estimates* used before tokens_used
+    existed."""
+    return sum(entry["debug_info"].get("tokens_used", 0) for entry in load_run_log(log_path).values())
+
+
 def diagnose_or_replay(
     record: DiscrepancyRecord, log_path: Path, logic_version: int
 ) -> tuple[AgentResolution, dict, bool]:

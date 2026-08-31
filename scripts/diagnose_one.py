@@ -85,6 +85,13 @@ def find_record(identifier: str, orders_df, settlements_df, bank_df):
 
 
 def main() -> None:
+    # Windows consoles default stdout to cp1252, which can't encode arbitrary
+    # model output (e.g. a narrow no-break space in a confidence_note) -- force
+    # UTF-8 so this script doesn't crash after a live call has already spent
+    # real Groq tokens and been appended to the cache.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("identifier", help="order_id (settled) or UTR (unmatched bank line)")
     args = parser.parse_args()

@@ -684,6 +684,21 @@ class DiscrepancyRecord(BaseModel):
 This lets the agent reason about a batch-level flat deduction (e.g. a wire fee spread
 across a UTR batch) without giving it cross-record memory.
 
+**Scope note, resolved during Layer 4 code review (2026-08-31): `BatchContext` /
+`BATCH_LEVEL_FEE` struck from scope, not built out further.** The schema field and the
+`BATCH_LEVEL_FEE` root-cause code exist (`src/agent/discrepancy.py`,
+`src/agent/resolution.py`), but every `utr_batch` record in `ground_truth.json` resolves
+via `expected_resolution: fast_path` (largest-remainder allocation, Layer 3) — no
+generated category ever produces a batch-level fee anomaly that needs agent diagnosis, so
+`batch_context` is never populated by either discrepancy-queue builder and
+`BATCH_LEVEL_FEE` is unreachable. This is a disclosed, accepted gap: designed for per the
+spec above, never exercised because no ground-truth category needs it, and correctly not
+claimed as complete anywhere. Building a real batch-level-fee generator category this late
+was judged not worth the added generator/ground-truth surface for a code path with no
+existing test coverage need; if this changes, wire `batch_context` in
+`build_settlement_discrepancy_queue`/`build_unmatched_bank_line_queue` and add a
+corresponding `ground_truth.json` category before claiming it's supported.
+
 **Stateless per-record execution — required.** Build a fresh, isolated state dict per
 record:
 ```python
