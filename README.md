@@ -1,37 +1,15 @@
 # AI Finance Controller
 
-Full scorecard (deterministic block + agent min/median/max block, per CLAUDE.md Sec.5)
-is written in Layer 9, once every layer is built and evaluate.py has produced real
-numbers against the frozen dataset. This file currently holds only development notes
-that are true as of the layer that wrote them.
+An AI-assisted reconciliation engine that matches orders, gateway settlements, and bank statements ,and is honest about the cases it can't confidently resolve, instead of guessing.
 
-## Development notes
+The full scorecard (deterministic results plus the agent's min/median/max across live runs) goes here once Layer 9 wraps and `evaluate.py` has run against the frozen dataset. Until then, this section is a running log of real decisions made while building it ,what changed, why, and what it means for anyone rerunning this.
 
-**Layer 4 (agent) model used during development is not Claude.** Claude is the
-intended production model -- the only permitted Razorpay-internal claim in this
-project is that Agent Studio runs on Anthropic's Claude Agent SDK, and this build
-targets that track. Development and testing instead run against Groq-hosted
-`openai/gpt-oss-120b` (via `langchain-groq`), for two reasons:
+## A couple of things worth knowing before you dig in
 
-1. **Cost.** Anthropic Console credits aren't available for the iteration volume
-   Layer 4 needs (many records x multiple retries x repeated test runs while
-   building); Groq's free tier covers that volume.
-2. **Model availability within Groq.** Llama 3.3 70B, the originally intended
-   dev model, was checked against the live Groq API key's `/openai/v1/models`
-   listing at build time and was not present -- Groq appears to have
-   deprecated/rotated it out of the free-tier offering since it was documented.
-   `openai/gpt-oss-120b` is the largest open-weights chat model this key actually
-   has access to, so it was used instead.
+**The agent was built and tested on an open-source model, not Claude, here's why.** Claude is the model this is actually designed for; the only Razorpay-internal fact this project leans on is that Agent Studio runs on Anthropic's Claude Agent SDK, and that's the track this build targets. But iterating on an agent means a lot of calls ,many records, retries, repeated test runs while things are still being debugged ,and that volume doesn't fit inside free Anthropic Console credits. So development runs on Groq's free tier instead, using `openai/gpt-oss-120b`.
 
-Swapping the production model to Claude is a one-line change in
-`src/agent/graph.py::_build_model()`.
+That specific model wasn't the original plan, either. The intent going in was Llama 3.3 70B, but by the time this was built, Groq had quietly dropped it from the models their API actually serves ,it just wasn't in the list anymore when checked. `gpt-oss-120b` was the largest open-weights model still available on the key, so that's what ended up carrying the actual development and testing.
 
-**Layer 8's 3-run agent evaluation is gathered across a multi-day window, not one
-sitting.** Groq's free tier caps at 200,000 tokens/day; a full evaluation run
-invokes the live agent on all 37 records with `expected_resolution` in
-`{agent_resolved, honest_exception}` (per `ground_truth.json`), and reporting a
-genuine min/median/max across 3 *independent* live runs (CLAUDE.md Sec.5 — not one
-run cached and replayed twice) needs roughly 3x that per day's budget on a single
-free key. So `data/agent_runs/<seed>_1.jsonl`, `_2.jsonl`, `_3.jsonl` carry
-timestamps days apart by design, not by accident — see `docs/plan.md`'s Layer 8
-section for the full methodology note.
+None of this is a permanent architectural choice ,swapping back to Claude for production is a one-line change in `src/agent/graph.py::_build_model()`.
+
+**The agent's evaluation numbers are being gathered across several days, not one sitting ,and that's deliberate, not a shortcut.** A full evaluation run means calling the live agent on every record that needs real judgment (37 of them, per the frozen dataset), and doing that three separate times so the reported result is an honest min/median/max rather than one lucky run dressed up as three. Groq's free tier caps out at 200,000 tokens a day, and three full runs need roughly three times that. So the three run logs -> `data/agent_runs/<seed>_1.jsonl`, `_2.jsonl`, `_3.jsonl` -> genuinely have timestamps days apart. That's the token budget talking, not neglect. The full reasoning is written up in `docs/plan.md`'s Layer 8 section if you want the details.
