@@ -800,6 +800,18 @@ this is the offline demo fallback.
 This is the only source of truth for any number in the README or the pitch. Never
 hand-write these numbers.
 
+**Methodology note: the 3 agent runs were gathered across a multi-day window, not one
+sitting.** Groq's free tier caps at 200,000 tokens/day; a full evaluation run touches
+all 37 records with `expected_resolution` in `{agent_resolved, honest_exception}`
+(measured directly against `ground_truth.json`, not this doc's earlier illustrative
+"15" example), and 3 independent live runs of that size exceed one day's budget on a
+single free key (observed cost during Layer 4 iteration: ~5,900 tokens per
+record-run). Caching the other 2 runs to fit one day was rejected as dishonest — the
+whole point of reporting min/median/max is real run-to-run variance (CLAUDE.md
+Sec.5), so all 3 must be genuinely independent live runs. `data/agent_runs/<seed>_1.jsonl`,
+`_2.jsonl`, `_3.jsonl` will therefore carry timestamps days apart; that gap is this
+rate limit, not an inconsistency.
+
 ---
 
 ## Layer 9 — Packaging, tests, docs
