@@ -860,7 +860,16 @@ rate limit, not an inconsistency.
   The frozen dataset's settlement dates span 2025-01-07 to 2025-02-04 —
   a cutoff before 2025-01-07 or after 2025-02-04 produces a degenerate
   all-one-bucket chart (all-projected or all-confirmed respectively) and
-  must not be used for the live demo.
+  must not be used for the live demo. That same `as_of=2025-01-20` trigger
+  reports `fast_path=29, agent_resolved=10, honest_exception=6` (total
+  orders 87) — these are **the mid-settlement snapshot numbers for the
+  forecast-chart demo only**, lower than the headline **63/20/17 full-batch
+  reconciliation numbers** (the unconditional, `as_of=None` run reported
+  elsewhere, e.g. in the README scorecard and Layer 3/6 acceptance
+  criteria) because Stage 2 is deliberately still gated for orders settling
+  after the cutoff. Never quote the two sets of numbers interchangeably —
+  reconcile with an unconditional trigger for the headline score, and only
+  use the as_of=2025-01-20 trigger for the forecast-chart visual.
 - Rehearse the live demo twice end-to-end on the actual presenting machine.
 - Record a full backup video in case live Docker/Postgres fails on stage; also confirm
   `evaluate.py --replay` works fully offline as a second-line fallback.
