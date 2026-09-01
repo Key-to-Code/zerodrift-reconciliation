@@ -845,6 +845,22 @@ rate limit, not an inconsistency.
 
 ## Layer 10 — Demo prep
 
+- **Forecast chart demo cutoff:** trigger the frozen batch with
+  `as_of=2025-01-20` (dashboard: check "Limit settlement posting to a cutoff
+  date", set the date to 2025-01-20) to get a real, non-fabricated
+  confirmed/projected split — see the as_of-gated Stage 2 posting fix
+  (`src/orchestration/batch_runner.py`). **Verified by an actual triggered
+  run against the frozen dataset** (not estimated): with `as_of=2025-01-20`,
+  `horizon_days=7` (the dashboard's fixed horizon), the forecast has 39
+  confirmed rows (Rs 105,435.50) and 46 projected rows (Rs 132,069.16 total,
+  ±5% band), of which 58 rows fall within the 7-day horizon the chart
+  actually renders: 39 confirmed (Rs 105,435.50, all bucketed on
+  2025-01-20) and 19 projected (Rs 54,467.98) spread across 2025-01-21,
+  01-22, 01-23, 01-24, and 01-27. Both bars will be visibly non-empty.
+  The frozen dataset's settlement dates span 2025-01-07 to 2025-02-04 —
+  a cutoff before 2025-01-07 or after 2025-02-04 produces a degenerate
+  all-one-bucket chart (all-projected or all-confirmed respectively) and
+  must not be used for the live demo.
 - Rehearse the live demo twice end-to-end on the actual presenting machine.
 - Record a full backup video in case live Docker/Postgres fails on stage; also confirm
   `evaluate.py --replay` works fully offline as a second-line fallback.
