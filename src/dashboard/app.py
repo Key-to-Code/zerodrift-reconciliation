@@ -37,12 +37,29 @@ with st.sidebar:
     if source == "seed":
         seed_value = st.number_input("Seed", min_value=0, value=42, step=1, key="trigger_seed")
         records_value = st.number_input("Records", min_value=1, value=100, step=1, key="trigger_records")
+
+    gate_stage_2 = st.checkbox(
+        "Limit settlement posting to a cutoff date",
+        key="trigger_gate_stage_2",
+        help=(
+            "Only settlements dated on or before the cutoff get posted (Stage 2). "
+            "Later ones stay captured-only, genuinely in flight -- this is what "
+            "lets the forecast chart show a real, non-fabricated 'projected' bucket."
+        ),
+    )
+    trigger_as_of = None
+    if gate_stage_2:
+        trigger_as_of = st.date_input(
+            "Settlement cutoff (as_of)", value=date(2025, 1, 20), key="trigger_as_of"
+        )
+
     if st.button("Trigger run", key="trigger_button"):
         try:
             summary = api_client.trigger_batch_run(
                 source,
                 seed=int(seed_value) if seed_value is not None else None,
                 records=int(records_value),
+                as_of=trigger_as_of,
             )
             new_id = summary["batch_run_id"]
             label = f"seed={int(seed_value)}" if source == "seed" else "frozen"

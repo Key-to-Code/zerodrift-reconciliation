@@ -60,8 +60,11 @@ def _raise_for_status(resp: httpx.Response) -> None:
         raise ApiClientError(resp.status_code, str(detail))
 
 
-def trigger_batch_run(source: str, seed: int | None = None, records: int = 100) -> dict:
-    resp = get_client().post("/batch-runs", json={"source": source, "seed": seed, "records": records})
+def trigger_batch_run(source: str, seed: int | None = None, records: int = 100, as_of: date | None = None) -> dict:
+    body = {"source": source, "seed": seed, "records": records}
+    if as_of is not None:
+        body["as_of"] = as_of.isoformat()
+    resp = get_client().post("/batch-runs", json=body)
     _raise_for_status(resp)
     return resp.json()
 

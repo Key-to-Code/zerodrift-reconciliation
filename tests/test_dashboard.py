@@ -9,7 +9,7 @@ Two groups of test live here:
   (src/api/main.py) via its own TestClient, wired in as api_client's client
   through set_client_factory(). This proves the dashboard's data layer is
   correct without needing a running Streamlit process.
-- AppTest-level tests (14-20) drive src/dashboard/app.py itself via
+- AppTest-level tests (14-21) drive src/dashboard/app.py itself via
   streamlit.testing.v1.AppTest -- Streamlit's headless test harness -- to
   prove the page actually wires those calls into widgets and renders
   without crashing. AppTest cannot inspect st.bar_chart's rendered content
@@ -448,3 +448,40 @@ def test_dashboard_two_runs_render_independently_side_by_side(dashboard_client):
     subheaders = {s.value for s in at.subheader}
     assert any(id1[:8] in s for s in subheaders)
     assert any(id2[:8] in s for s in subheaders)
+
+
+# ---------------------------------------------------------------------------
+# Test 21 -- the sidebar's settlement-cutoff checkbox actually drives a real,
+# non-fabricated "projected" forecast row through the real trigger path
+# (Layer 6 addendum: as_of-gated Stage 2 posting, approved after Layer 7 --
+# see src/orchestration/batch_runner.py's module docstring). Before that
+# fix, "projected" was unreachable via any real triggered run; this is the
+# end-to-end proof that the dashboard's demo control actually achieves it.
+# ---------------------------------------------------------------------------
+
+def test_dashboard_trigger_with_cutoff_checkbox_produces_real_projected_forecast(dashboard_client):
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(APP_PATH, default_timeout=30)
+    at.run()
+    at.checkbox(key="trigger_gate_stage_2").set_value(True)
+    at.run()
+    at.date_input(key="trigger_as_of").set_value(date(2025, 1, 20))
+    at.button(key="trigger_button").click()
+    at.run()
+
+    assert not at.exception
+    batch_run_id = list(at.session_state["runs"].keys())[0]
+
+    metric_values = {m.label: m.value for m in at.metric}
+    resolved_total = int(metric_values["Fast path"]) + int(metric_values["Agent resolved"])
+    assert resolved_total < FROZEN_FAST_PATH_COUNT + FROZEN_AGENT_RESOLVED_COUNT, (
+        "the cutoff must actually have gated some settlements this run"
+    )
+
+    # Confirm through the real API (same as project_cashflow would compute)
+    # that this run's ledger genuinely carries an in-flight order.
+    forecast_rows = api_client.get_forecast(batch_run_id, as_of=date(2025, 1, 20), horizon_days=7)
+    statuses = {row["account_status"] for row in forecast_rows}
+    assert "projected" in statuses
+    assert "confirmed" in statuses
