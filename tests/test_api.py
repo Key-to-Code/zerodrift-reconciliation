@@ -519,6 +519,193 @@ def test_trigger_batch_run_seed_source_uses_injected_diagnose_fn_no_network(clie
 
 
 # ---------------------------------------------------------------------------
+# Tests 16-20 -- as_of-gated Stage 2 posting (Layer 6 addendum, approved
+# after Layer 7: see src/orchestration/batch_runner.py's module docstring
+# for why this exists -- without it, project_cashflow()'s "projected"
+# status was structurally unreachable through any real triggered run).
+# ---------------------------------------------------------------------------
+
+def test_orchestrator_as_of_gates_fast_path_stage_2_for_future_settlement(db_session, batch_run_id):
+    from datetime import date as _date
+
+    # UTR is pure alphanumeric (no underscore) so the narration hits
+    # fast_path's phase1 EXACT token regex (UTR[A-Z0-9]+) deterministically,
+    # same convention as test 11 above -- this test needs a genuine
+    # fast-path clean match to exercise the fast_path-loop as_of gate
+    # specifically, not just fall through to the discrepancy queue.
+    order = InternalOrder(
+        order_id="ORD_FUTURE1", gross_amount=Decimal("1000.00"), customer_id="C1",
+        payment_method="upi", timestamp="2025-01-06T10:00:00+05:30",
+    )
+    # UPI is T+1: order captured 2025-01-06 settles 2025-01-07 for a genuine
+    # fast-path clean match (verified: same-day and T+2 both fail matching
+    # and fall to the discrepancy queue instead -- only exact T+1 resolves).
+    settlement = GatewaySettlement(
+        payment_id="PAY_FUTURE1", order_id="ORD_FUTURE1", gross_amount=Decimal("1000.00"),
+        payment_method="upi", mdr=Decimal("0.00"), gst_on_mdr=Decimal("0.00"), tds_194o=Decimal("1.00"),
+        net_amount=Decimal("999.00"), utr="UTRFUTURE0001", settlement_date=_date(2025, 1, 7),
+    )
+    bank_line = BankStatementLine(
+        utr="UTRFUTURE0001", credited_amount=Decimal("999.00"),
+        value_date=_date(2025, 1, 7), narration="NEFT-UTRFUTURE0001-SETTLE",
+    )
+
+    summary = run_batch(
+        db_session, batch_run_id, [order], [settlement], [bank_line],
+        diagnose_fn=_stub_diagnose_fn(), as_of=_date(2025, 1, 6),
+    )
+    assert summary.fast_path_count == 0  # gated -- not counted as resolved this run
+
+    rows = db_session.execute(
+        select(Account.account_code, JournalLine.direction, JournalLine.amount)
+        .join(JournalLine, JournalLine.account_id == Account.account_id)
+        .join(JournalEntry, JournalEntry.entry_id == JournalLine.entry_id)
+        .where(JournalEntry.batch_run_id == batch_run_id, JournalEntry.reference_id == "ORD_FUTURE1")
+    ).all()
+    assert (REVENUE_GROSS, "C", Decimal("1000.00")) in rows, "Stage 1 (capture) must still post regardless of as_of"
+    assert CASH not in {c for c, _d, _a in rows}, "Stage 2 must not post for a settlement dated after as_of"
+
+    match = db_session.execute(
+        select(ReconciliationMatch).where(
+            ReconciliationMatch.batch_run_id == batch_run_id, ReconciliationMatch.order_id == "ORD_FUTURE1"
+        )
+    ).scalar_one_or_none()
+    assert match is None, "an order not yet reconciled as of this date must carry no reconciliation_matches row"
+
+
+def test_orchestrator_as_of_boundary_is_inclusive(db_session, batch_run_id):
+    from datetime import date as _date
+
+    order = InternalOrder(
+        order_id="ORD_ONTIME1", gross_amount=Decimal("500.00"), customer_id="C1",
+        payment_method="upi", timestamp="2025-01-06T10:00:00+05:30",
+    )
+    # UPI T+1: order captured 2025-01-06 settles 2025-01-07 -- as_of is set
+    # to that same 2025-01-07 to prove the boundary (`>`, not `>=`) posts
+    # normally rather than gating.
+    settlement = GatewaySettlement(
+        payment_id="PAY_ONTIME1", order_id="ORD_ONTIME1", gross_amount=Decimal("500.00"),
+        payment_method="upi", mdr=Decimal("0.00"), gst_on_mdr=Decimal("0.00"), tds_194o=Decimal("0.50"),
+        net_amount=Decimal("499.50"), utr="UTRONTIME0001", settlement_date=_date(2025, 1, 7),
+    )
+    bank_line = BankStatementLine(
+        utr="UTRONTIME0001", credited_amount=Decimal("499.50"),
+        value_date=_date(2025, 1, 7), narration="NEFT-UTRONTIME0001-SETTLE",
+    )
+
+    summary = run_batch(
+        db_session, batch_run_id, [order], [settlement], [bank_line],
+        diagnose_fn=_stub_diagnose_fn(), as_of=_date(2025, 1, 7),
+    )
+    assert summary.fast_path_count == 1, "a settlement dated exactly on as_of must still post normally"
+
+    rows = db_session.execute(
+        select(Account.account_code, JournalLine.direction, JournalLine.amount)
+        .join(JournalLine, JournalLine.account_id == Account.account_id)
+        .join(JournalEntry, JournalEntry.entry_id == JournalLine.entry_id)
+        .where(JournalEntry.batch_run_id == batch_run_id, JournalEntry.reference_id == "ORD_ONTIME1")
+    ).all()
+    assert (CASH, "D", Decimal("499.50")) in rows
+
+
+def test_orchestrator_as_of_gates_discrepancy_queue_and_skips_diagnosis(db_session, batch_run_id):
+    from datetime import date as _date
+
+    order = InternalOrder(
+        order_id="ORD_FUTURE2", gross_amount=Decimal("1000.00"), customer_id="C1",
+        payment_method="credit_card", timestamp="2025-01-06T10:00:00+05:30",
+    )
+    # Deviated MDR -- excluded from the fast path, reaching the discrepancy queue.
+    settlement = GatewaySettlement(
+        payment_id="PAY_FUTURE2", order_id="ORD_FUTURE2", gross_amount=Decimal("1000.00"),
+        payment_method="credit_card", mdr=Decimal("25.00"), gst_on_mdr=Decimal("4.50"),
+        tds_194o=Decimal("1.00"), net_amount=Decimal("969.50"), utr="UTR_FUTURE2",
+        settlement_date=_date(2025, 1, 10),
+    )
+
+    calls = []
+
+    def _spy(record):
+        calls.append(record)
+        return (
+            AgentResolution(
+                root_cause_code="AMEX_SURCHARGE", quantified_delta_paise=700,
+                evidence_tool_calls=[], confidence_note="stub",
+            ),
+            {},
+        )
+
+    summary = run_batch(
+        db_session, batch_run_id, [order], [settlement], [],
+        diagnose_fn=_spy, as_of=_date(2025, 1, 6),
+    )
+    assert summary.agent_resolved_count == 0
+    assert calls == [], "diagnose_fn must not be called for a settlement dated after as_of"
+
+    match = db_session.execute(
+        select(ReconciliationMatch).where(
+            ReconciliationMatch.batch_run_id == batch_run_id, ReconciliationMatch.order_id == "ORD_FUTURE2"
+        )
+    ).scalar_one_or_none()
+    assert match is None
+
+
+def test_orchestrator_as_of_gates_unmatched_bank_line_and_skips_diagnosis(db_session, batch_run_id):
+    from datetime import date as _date
+
+    bank_line = BankStatementLine(
+        utr="UTR_FUTURE_ORPHAN", credited_amount=Decimal("777.00"),
+        value_date=_date(2025, 1, 10), narration="NEFT-UTR_FUTURE_ORPHAN-SETTLE",
+    )
+
+    calls = []
+
+    def _spy(record):
+        calls.append(record)
+        return _stub_diagnose_fn()(record)
+
+    summary = run_batch(
+        db_session, batch_run_id, [], [], [bank_line],
+        diagnose_fn=_spy, as_of=_date(2025, 1, 6),
+    )
+    assert summary.honest_exception_count == 0
+    assert calls == [], "diagnose_fn must not be called for a bank credit dated after as_of"
+
+    reference_id = "UNMATCHED_BANK_UTR_FUTURE_ORPHAN"
+    entry = db_session.execute(
+        select(JournalEntry).where(
+            JournalEntry.batch_run_id == batch_run_id, JournalEntry.reference_id == reference_id
+        )
+    ).scalar_one_or_none()
+    assert entry is None, "a bank credit not yet reconciled as of this date must carry no journal entry"
+
+
+def test_as_of_gated_frozen_trigger_produces_a_real_projected_forecast_row(client, db_session):
+    """End-to-end proof, through the real HTTP path, that this fix actually
+    achieves its goal: a frozen batch triggered with an as_of cutoff that
+    splits its settlement dates leaves some orders genuinely projected, and
+    project_cashflow() -- called with that same as_of -- reports it as such.
+    Before this fix, "projected" was unreachable via any real triggered run
+    (see the Layer 7 dashboard follow-up conversation)."""
+    cutoff = "2025-01-20"  # splits the frozen dataset's settlement dates 41/46
+
+    resp = client.post("/batch-runs", json={"source": "frozen", "as_of": cutoff})
+    assert resp.status_code == 200
+    body = resp.json()
+    batch_run_id = body["batch_run_id"]
+
+    # Fewer orders got fully reconciled this run than the unconditional total.
+    assert body["fast_path_count"] + body["agent_resolved_count"] < FROZEN_FAST_PATH_COUNT + FROZEN_AGENT_RESOLVED_COUNT
+
+    forecast_resp = client.get(f"/batch-runs/{batch_run_id}/forecast", params={"as_of": cutoff, "horizon_days": 7})
+    assert forecast_resp.status_code == 200
+    forecast_rows = forecast_resp.json()
+    statuses = {row["account_status"] for row in forecast_rows}
+    assert "projected" in statuses, "a real as_of-gated trigger must produce at least one genuinely projected row"
+    assert "confirmed" in statuses
+
+
+# ---------------------------------------------------------------------------
 # Small date helpers -- avoid importing datetime at module scope repeatedly
 # ---------------------------------------------------------------------------
 

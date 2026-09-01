@@ -102,6 +102,7 @@ class TriggerBatchRunRequest(BaseModel):
     source: Literal["frozen", "seed"] = "frozen"
     seed: int | None = None
     records: int = 100
+    as_of: date | None = None
 
     @model_validator(mode="after")
     def seed_required_for_seed_source(self) -> "TriggerBatchRunRequest":
@@ -170,7 +171,9 @@ def trigger_batch_run(
 ) -> BatchRunSummaryResponse:
     batch_run_id = uuid.uuid4()
     orders, settlements, bank_lines = _load_for_recipe(req.model_dump())
-    summary = run_batch(session, batch_run_id, orders, settlements, bank_lines, diagnose_fn=diagnose_fn)
+    summary = run_batch(
+        session, batch_run_id, orders, settlements, bank_lines, diagnose_fn=diagnose_fn, as_of=req.as_of
+    )
     _BATCH_RUN_REGISTRY[batch_run_id] = {"source": req.source, "seed": req.seed, "records": req.records}
     return BatchRunSummaryResponse(
         batch_run_id=str(batch_run_id),

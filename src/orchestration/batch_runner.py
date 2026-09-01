@@ -35,10 +35,34 @@ Posting design, per discrepancy outcome (approved before implementation):
   post_honest_exception debits CASH (real money that arrived) against
   SUSPENSE_UNRESOLVED, reference_id UNMATCHED_BANK_<utr> (Layer 1 Addendum
   A4's reserved synthetic identifier).
+
+as_of-gated Stage 2 posting (Layer 6 addendum, approved after Layer 7):
+run_batch() originally posted Stage 1 AND Stage 2 for every order
+unconditionally, in one synchronous call. That made src/forecast/cashflow.py's
+"projected" status (Layer 5) structurally unreachable through any real
+triggered run: project_cashflow()'s as_of parameter exists specifically to
+model "not everything has settled yet as of this date," but the orchestrator
+never respected settlement timing at all, so every posted order was always
+already confirmed. This is a genuine Layer 5/6 integration gap, not a Layer 7
+concern -- flagged and approved before implementation (see the Layer 7
+follow-up conversation).
+
+Fix: an optional `as_of` cutoff. Stage 1 (capture) is still posted
+unconditionally for every order -- that reflects real capture timing,
+independent of settlement. But Stage 2 (and the corresponding
+reconciliation_matches row) is only posted for a settlement/bank-credit whose
+own date (settlement_date, or value_date for an unmatched bank line) has
+already occurred by `as_of`. An order whose settlement postdates `as_of` is
+left exactly where a genuinely partial batch would leave it: captured, not
+yet reconciled -- picked up by a later run once `as_of` (or an unspecified
+run) advances past it. `as_of=None` (the default) disables the cutoff
+entirely and reproduces the original, unconditional behavior byte-for-byte --
+every existing test and the frozen dataset's full pipeline are unaffected.
 """
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -167,13 +191,20 @@ def run_batch(
     bank_lines: list[BankStatementLine],
     diagnose_fn: DiagnoseFn | None = None,
     agent_cache_path: Path = DEFAULT_AGENT_CACHE_PATH,
+    as_of: date | None = None,
 ) -> BatchRunSummary:
     """Runs the full pipeline for one batch and posts every result to the
     ledger, writing one reconciliation_matches row per real order and one
     per unmatched bank line (Layer 1 Addendum A4's UNMATCHED_BANK_<utr>
     synthetic identifier). Assumes batch_run_id is fresh -- not idempotent
     against being called twice with the same id (the API always mints a new
-    uuid4() per trigger, per docs/plan.md Layer 6)."""
+    uuid4() per trigger, per docs/plan.md Layer 6).
+
+    as_of, if given, gates Stage 2: a settlement/bank-credit dated after
+    as_of is left at Stage 1 only (captured, not yet reconciled) -- see the
+    module docstring's "as_of-gated Stage 2 posting" section. as_of=None
+    (the default) posts everything unconditionally, unchanged from the
+    original behavior."""
     if diagnose_fn is None:
         diagnose_fn = _default_diagnose_fn(agent_cache_path)
 
@@ -192,6 +223,10 @@ def run_batch(
     fast_path_count = agent_resolved_count = honest_exception_count = 0
 
     for group in fast_path_result.resolved:
+        if as_of is not None and any(
+            settlements_by_order[oid].settlement_date > as_of for oid in group.order_ids
+        ):
+            continue  # this settlement genuinely hasn't happened yet as of this clock
         entries_by_order = _post_resolved_group(session, batch_run_id, group, settlements_by_order)
         for order_id in group.order_ids:
             settlement = settlements_by_order[order_id]
@@ -211,6 +246,8 @@ def run_batch(
         order_id = record.order_context.order_id
         order = orders_by_id[order_id]
         settlement = settlements_by_order[order_id]
+        if as_of is not None and settlement.settlement_date > as_of:
+            continue  # this settlement genuinely hasn't happened yet as of this clock
         resolution, _debug_info = diagnose_fn(record)
         note = (
             f"discrepancy_reason={record.discrepancy_reason}; root_cause={resolution.root_cause_code}; "
@@ -266,6 +303,8 @@ def run_batch(
     unmatched_records = build_unmatched_bank_line_queue(orders_df, settlements_df, bank_df)
     for record in unmatched_records:
         bank_credit = record.bank_credits[0]
+        if as_of is not None and date.fromisoformat(bank_credit.value_date) > as_of:
+            continue  # this bank credit genuinely hasn't happened yet as of this clock
         resolution, _debug_info = diagnose_fn(record)
         note = (
             f"discrepancy_reason={record.discrepancy_reason}; root_cause={resolution.root_cause_code}; "
