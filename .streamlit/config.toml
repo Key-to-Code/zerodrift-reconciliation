@@ -1,0 +1,12 @@
+# Streamlit's native theming surface. Values here must match src/dashboard/tokens.py --
+# see that module's docstring for where each value is sourced from Blade
+# (github.com/razorpay/blade, MIT-licensed). Streamlit does not support importing
+# a Python module into this file, so keep the two in sync by hand.
+
+[theme]
+primaryColor = "#1364F1"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F7F7F7"
+textColor = "#050505"
+font = "sans serif"
+base = "light"
