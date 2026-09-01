@@ -12,3 +12,6 @@ langchain-groq
 langchain-core
 groq
 python-dotenv
+fastapi
+uvicorn
+httpx
