@@ -246,6 +246,40 @@ def post_utr_batch_settlement(
     return bank_credit_entry, settlement_entries
 
 
+def post_refund_clawback_reversal(
+    session: Session, batch_run_id: uuid.UUID, order_id: str, refund_amount_paise: int
+) -> JournalEntry:
+    """Refund revenue-recognition reversal (plan Sec.1.4 refund_clawback /
+    CLAUDE.md Sec.1's generator addendum): Debit REVENUE_GROSS, Credit
+    AR_GATEWAY_CLEARING for the refund amount. MDR_EXPENSE,
+    GST_ITC_RECEIVABLE and TDS_194O_CREDIT are never touched here -- the
+    merchant does not recover the processing fee on a refunded transaction,
+    which is the entire point of the refund_clawback category.
+
+    Note on AR_GATEWAY_CLEARING going net-negative for this order: Stage 2
+    already credits AR_GATEWAY_CLEARING by the full gross amount, clearing
+    the receivable to zero once the gateway has paid. This reversal credits
+    it a second time, by the refund amount, so the account nets negative for
+    the order. That is the intended mechanism, not a bug: it is the
+    balancing residual for cash the merchant already received from the
+    gateway but owes back to the customer directly -- a real-world payout
+    this project deliberately does not model as a further CASH movement
+    (out of scope, consistent with CLAUDE.md's discipline of stating a
+    modeling assumption in one sentence rather than dodging it).
+    """
+    spec = JournalEntrySpec(
+        batch_run_id=batch_run_id,
+        idempotency_key=f"RUN:{batch_run_id}:ORDER:{order_id}:REFUND_REVERSAL",
+        reference_id=order_id,
+        description=f"Refund revenue reversal (MDR not reversed): {order_id}",
+        lines=[
+            JournalLineSpec(account_code=REVENUE_GROSS, direction="D", amount_paise=refund_amount_paise),
+            JournalLineSpec(account_code=AR_GATEWAY_CLEARING, direction="C", amount_paise=refund_amount_paise),
+        ],
+    )
+    return post_journal_entry(session, spec)
+
+
 def post_honest_exception(
     session: Session,
     batch_run_id: uuid.UUID,
