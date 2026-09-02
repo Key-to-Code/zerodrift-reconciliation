@@ -113,6 +113,37 @@ def parse_confidence_note_category(confidence_note: str | None) -> str:
     return "unknown"
 
 
+def parse_confidence_note_candidate(confidence_note: str | None) -> str:
+    """Extracts `candidate_order_id=...` from a confidence_note, when
+    present. Only src/orchestration/batch_runner.py's unmatched_bank_line
+    note (orphan/adversarial_trap categories) ever carries this field --
+    see _build_unmatched_bank_line_note's docstring; a settlement-discrepancy
+    note never has a candidate concept and will always fall through to the
+    "not applicable" default below, same as a note logged before this field
+    existed. Comma-joined order ids if 2+ candidates were surfaced."""
+    if not confidence_note:
+        return "not applicable"
+    for part in confidence_note.split(";"):
+        part = part.strip()
+        if part.startswith("candidate_order_id="):
+            return part[len("candidate_order_id="):] or "not applicable"
+    return "not applicable"
+
+
+def parse_confidence_note_reason(confidence_note: str | None) -> str:
+    """Strips the machine-readable `key=value;` fields off a confidence_note
+    and returns the free-text tail (the agent's or generator's own sentence)
+    -- works across all three note shapes batch_runner.py produces (3-field
+    legacy, 4-field settlement-discrepancy, 4-field unmatched_bank_line with
+    candidate_order_id) without hardcoding field names, since it just drops
+    any part containing "=" rather than parsing specific keys."""
+    if not confidence_note:
+        return ""
+    parts = [p.strip() for p in confidence_note.split(";")]
+    tail = [p for p in parts if p and "=" not in p]
+    return "; ".join(tail)
+
+
 def build_forecast_chart_data(forecast_rows: list[dict], as_of: date) -> dict[str, dict[str, int]]:
     """Buckets forecast rows by date into confirmed vs. projected totals
     (paise), filtered to within_horizon, for the confirmed-vs-projected

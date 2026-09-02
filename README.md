@@ -1,4 +1,4 @@
-# AI Finance Controller
+# ZeroDrift
 
 An AI-assisted reconciliation engine that matches orders, gateway settlements, and bank statements ,and is honest about the cases it can't confidently resolve, instead of guessing.
 

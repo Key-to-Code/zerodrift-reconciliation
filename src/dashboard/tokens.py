@@ -67,3 +67,18 @@ COLOR_STATUS_NOTICE = "#C75300"       # honest exception -- feedback.text.notice
 FONT_TEXT = '"Inter", "Inter Fallback Arial", Arial, sans-serif'
 FONT_HEADING = '"TASA Orbiter", "TASA Orbiter Fallback Arial", Arial, sans-serif'
 FONT_MONO = '"Menlo", "Roboto Mono", "Courier New", monospace'
+
+# -- design.md follow-up (Layer 7 UI pass) --------------------------------
+# The three values below are NOT separately-fetched Blade tokens -- they are
+# CSS color-mix() blends of the already-sourced COLOR_STATUS_* intense
+# tokens above, toward white, used for pill/card backgrounds and the caution
+# banner. Kept as a plain CSS function (not a hand-picked new hex) so the
+# only real color data in this file stays the originally verified fetch.
+COLOR_STATUS_POSITIVE_SUBTLE = f"color-mix(in srgb, {COLOR_STATUS_POSITIVE} 12%, white)"
+COLOR_STATUS_INFORMATION_SUBTLE = f"color-mix(in srgb, {COLOR_STATUS_INFORMATION} 12%, white)"
+COLOR_STATUS_NOTICE_SUBTLE = f"color-mix(in srgb, {COLOR_STATUS_NOTICE} 12%, white)"
+
+# Generic elevation shadow for the hover-lift effect (design.md 3.2.1) --
+# not a Blade token (Blade's shadow scale wasn't part of the original
+# fetch); a conventional, restrained low-elevation shadow.
+SHADOW_HOVER = "0 4px 12px rgba(5, 5, 5, 0.10)"

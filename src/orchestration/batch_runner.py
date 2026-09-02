@@ -160,6 +160,25 @@ def _post_resolved_group(
     return {oid: entry for oid, entry in zip(group.order_ids, settlement_entries)}
 
 
+def _build_unmatched_bank_line_note(record: DiscrepancyRecord, resolution: AgentResolution) -> str:
+    """Threads record.candidate_orders (the near-duplicate order(s) shown to
+    the agent as a force-match temptation -- see discrepancy.py's
+    find_candidate_orders(), populated only for orphan/adversarial_trap
+    records) into the note as candidate_order_id=, so the dashboard's
+    Exceptions screen can show the real candidate the agent was given and
+    chose not to force-match, instead of nothing. Empty when no candidate
+    was close enough in amount/date to be surfaced -- never fabricated.
+    Comma-joined for the rare case of 2+ candidates. This is genuinely new
+    data on top of the pre-existing 3-field format (discrepancy_reason=;
+    root_cause=; <sentence>) -- see api_client.parse_confidence_note_candidate
+    for the reader that stays honest about a note built before this change."""
+    candidate_ids = ",".join(c.order_id for c in record.candidate_orders)
+    return (
+        f"discrepancy_reason={record.discrepancy_reason}; root_cause={resolution.root_cause_code}; "
+        f"candidate_order_id={candidate_ids}; {resolution.confidence_note}"
+    )
+
+
 def _record_match(
     session: Session,
     batch_run_id: uuid.UUID,
@@ -306,10 +325,7 @@ def run_batch(
         if as_of is not None and date.fromisoformat(bank_credit.value_date) > as_of:
             continue  # this bank credit genuinely hasn't happened yet as of this clock
         resolution, _debug_info = diagnose_fn(record)
-        note = (
-            f"discrepancy_reason={record.discrepancy_reason}; root_cause={resolution.root_cause_code}; "
-            f"{resolution.confidence_note}"
-        )
+        note = _build_unmatched_bank_line_note(record, resolution)
         reference_id = f"UNMATCHED_BANK_{bank_credit.utr}"
         entry = post_honest_exception(
             session, batch_run_id, reference_id, CASH, "D", bank_credit.credited_amount_paise, note=note
