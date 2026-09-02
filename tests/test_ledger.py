@@ -6,6 +6,7 @@ real Postgres test database (see tests/conftest.py) -- CLAUDE.md forbids
 mocking the ENUM types / deferred constraint trigger this layer depends on.
 """
 import json
+import os
 import uuid
 from pathlib import Path
 
@@ -612,3 +613,78 @@ def test_refund_reversal_posted_for_all_frozen_refund_clawback_orders_trial_bala
     assert ar_row["debit_total_paise"][0] == gross_total
     assert ar_row["credit_total_paise"][0] == gross_total + refund_total
     assert ar_row["net_balance_paise"][0] == -refund_total
+
+
+# ---------------------------------------------------------------------------
+# ensure_schema_exists -- the real bug: the running app's own
+# `finance_controller` database never gets db_schema.sql applied
+# automatically (only tests/conftest.py's pg_engine fixture did, against a
+# separate finance_controller_test database), so a freshly (re)created
+# Postgres container served a 500 on every route until db_schema.sql was
+# manually piped into psql. Uses its own throwaway database, deliberately
+# reset to schema-less before each test -- never pg_engine/db_session,
+# which stay schema'd for every other test in this file.
+# ---------------------------------------------------------------------------
+
+_ENSURE_SCHEMA_TEST_DB = "finance_controller_test_ensure_schema"
+_ENSURE_SCHEMA_ADMIN_URL = os.environ.get(
+    "ADMIN_DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5433/postgres"
+)
+
+
+@pytest.fixture()
+def schemaless_engine():
+    from sqlalchemy import create_engine
+
+    from src.ledger.models import drop_schema, ensure_database_exists
+
+    ensure_database_exists(_ENSURE_SCHEMA_ADMIN_URL, _ENSURE_SCHEMA_TEST_DB)
+    db_url = _ENSURE_SCHEMA_ADMIN_URL.rsplit("/", 1)[0] + f"/{_ENSURE_SCHEMA_TEST_DB}"
+    engine = create_engine(db_url, future=True)
+    drop_schema(engine)  # start from genuinely schema-less, every time
+    yield engine
+    engine.dispose()
+
+
+def test_ensure_schema_exists_creates_schema_when_missing(schemaless_engine):
+    from src.ledger.models import ensure_schema_exists
+
+    with schemaless_engine.connect() as conn:
+        assert conn.execute(text("SELECT to_regclass('public.accounts')")).scalar() is None
+
+    ensure_schema_exists(schemaless_engine)
+
+    with schemaless_engine.connect() as conn:
+        assert conn.execute(text("SELECT to_regclass('public.accounts')")).scalar() is not None
+        seeded_count = conn.execute(text("SELECT count(*) FROM accounts")).scalar()
+        # 9 as of writing -- src/ledger/db_schema.sql's `INSERT INTO accounts`
+        # block. If this fails after a genuine chart-of-accounts change
+        # (e.g. adding BATCH_LEVEL_FEE), update the expected count below to
+        # match db_schema.sql, don't just delete the assertion.
+        assert seeded_count == 9, (
+            f"expected 9 seeded accounts (db_schema.sql's INSERT INTO accounts "
+            f"block as of writing), got {seeded_count} -- if you intentionally "
+            f"added/removed an account in db_schema.sql, update this expected "
+            f"count to match; if not, the schema got seeded unexpectedly"
+        )
+
+
+def test_ensure_schema_exists_is_idempotent_when_already_present(schemaless_engine):
+    """Doesn't assert any specific count -- only that a second call changes
+    nothing, which is the actual property under test and stays correct no
+    matter how many accounts db_schema.sql seeds in the future."""
+    from src.ledger.models import ensure_schema_exists
+
+    ensure_schema_exists(schemaless_engine)  # creates it
+    with schemaless_engine.connect() as conn:
+        count_after_first_call = conn.execute(text("SELECT count(*) FROM accounts")).scalar()
+
+    ensure_schema_exists(schemaless_engine)  # must not error or re-seed accounts
+    with schemaless_engine.connect() as conn:
+        count_after_second_call = conn.execute(text("SELECT count(*) FROM accounts")).scalar()
+
+    assert count_after_second_call == count_after_first_call, (
+        f"a second ensure_schema_exists() call changed the accounts row count "
+        f"({count_after_first_call} -> {count_after_second_call}) -- it should "
+        f"be a no-op once the schema already exists"
+    )

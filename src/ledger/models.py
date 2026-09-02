@@ -157,6 +157,24 @@ def reset_schema(engine) -> None:
     create_schema(engine)
 
 
+def ensure_schema_exists(engine) -> None:
+    """Applies db_schema.sql if the ledger schema isn't already present on
+    this database -- idempotent, safe to call every time the app starts.
+    db_schema.sql itself is plain `CREATE TYPE`/`CREATE TABLE` (no `IF NOT
+    EXISTS`), so it errors on a re-run against an already-schema'd database;
+    this checks first via `to_regclass`, a cheap, standard Postgres
+    existence probe, and only calls create_schema() when the `accounts`
+    table is genuinely absent. Unlike reset_schema (test-only, destructive),
+    this never drops anything -- it exists to bridge the gap between a
+    freshly (re)created Postgres container (e.g. after `docker compose down
+    -v`) and the schema the app expects, without a manual
+    `psql -f db_schema.sql` step. Wired into src/api/main.py's startup."""
+    with engine.connect() as conn:
+        already_exists = conn.execute(text("SELECT to_regclass('public.accounts')")).scalar()
+    if already_exists is None:
+        create_schema(engine)
+
+
 def ensure_database_exists(admin_database_url: str, target_db_name: str) -> None:
     """Create `target_db_name` on the server addressed by `admin_database_url`
     if it does not already exist. Used by the test fixture to provision a
