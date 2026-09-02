@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -33,12 +34,10 @@ from src.data.generator import generate_batch
 from src.data.models import BankStatementLine, GatewaySettlement, InternalOrder
 from src.forecast.cashflow import project_cashflow
 from src.ledger.journal import trial_balance
-from src.ledger.models import ReconciliationMatch, get_engine, get_sessionmaker
+from src.ledger.models import ReconciliationMatch, ensure_schema_exists, get_engine, get_sessionmaker
 from src.orchestration.batch_runner import DiagnoseFn, run_batch
 
 FROZEN_DIR = Path(__file__).resolve().parents[2] / "data" / "challenge_batch_100"
-
-app = FastAPI(title="AI Finance Controller API")
 
 _engine = None
 _session_factory = None
@@ -58,6 +57,32 @@ def get_session():
         yield session
     finally:
         session.close()
+
+
+def _should_apply_schema_on_startup(app: FastAPI) -> bool:
+    """True unless get_session has been overridden -- i.e. running under the
+    test suite's own fixtures, which apply the ledger schema to a separate
+    finance_controller_test database via tests/conftest.py's pg_engine
+    fixture (see conftest.py's module docstring). Startup schema-application
+    must never also touch the real finance_controller database from a test
+    run, so it's skipped whenever a test has already swapped get_session."""
+    return get_session not in app.dependency_overrides
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Applies db_schema.sql on startup if the ledger schema isn't already
+    present -- without this, a freshly (re)created Postgres container (e.g.
+    after `docker compose down -v`) serves a 500 on every route until
+    someone manually pipes db_schema.sql into psql. See
+    ensure_schema_exists's docstring in src/ledger/models.py."""
+    if _should_apply_schema_on_startup(app):
+        _get_session_factory()
+        ensure_schema_exists(_engine)
+    yield
+
+
+app = FastAPI(title="ZeroDrift API", lifespan=lifespan)
 
 
 def get_diagnose_fn() -> DiagnoseFn | None:
