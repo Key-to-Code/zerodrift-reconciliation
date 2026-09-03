@@ -519,6 +519,32 @@ def test_trigger_batch_run_seed_source_uses_injected_diagnose_fn_no_network(clie
 
 
 # ---------------------------------------------------------------------------
+# AgentRateLimitedError surfaces as a clean 503 with a real detail message,
+# not FastAPI's default opaque 500 (2026-09-03 debugging session: a live
+# groq.RateLimitError previously propagated uncaught all the way here). No
+# live model call needed -- the injected diagnose_fn raises the same typed
+# exception the real live path raises once daily_token_tracker.check_budget()
+# or _invoke_with_backoff (src/agent/graph.py) detects a daily-quota 429.
+# ---------------------------------------------------------------------------
+
+def test_trigger_batch_run_surfaces_clean_503_on_agent_rate_limit(client):
+    from src.agent.rate_limiter import AgentRateLimitedError
+    from src.api.main import app, get_diagnose_fn
+
+    def _rate_limited_diagnose_fn(record):
+        raise AgentRateLimitedError("Local daily token budget nearly exhausted: 199000/200000 used today")
+
+    app.dependency_overrides[get_diagnose_fn] = lambda: _rate_limited_diagnose_fn
+    try:
+        resp = client.post("/batch-runs", json={"source": "seed", "seed": 999, "records": 10})
+    finally:
+        del app.dependency_overrides[get_diagnose_fn]
+
+    assert resp.status_code == 503
+    assert "daily token budget" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
 # Tests 16-20 -- as_of-gated Stage 2 posting (Layer 6 addendum, approved
 # after Layer 7: see src/orchestration/batch_runner.py's module docstring
 # for why this exists -- without it, project_cashflow()'s "projected"

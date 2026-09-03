@@ -48,6 +48,7 @@ from langgraph.graph import END, StateGraph
 from pydantic import ValidationError
 
 from src.agent.discrepancy import DiscrepancyRecord
+from src.agent.rate_limiter import AgentRateLimitedError, daily_token_tracker, is_daily_quota_error
 from src.agent.resolution import AgentResolution
 from src.agent.tools import TOOL_REGISTRY, get_tax_rules, query_merchant_contract, check_settlement_timing
 
@@ -270,11 +271,20 @@ def _invoke_with_backoff(model, messages, max_retries: int = 4):
     here -- that lives in the invoke_tool/propose_resolution node wrappers
     so the deterministic _logic functions (called directly by tests with a
     stub model) never sleep or depend on real timing.
+
+    A DAILY-quota (TPD) 429 is a different case, NOT retried here: Groq's
+    daily window doesn't clear in the few seconds this loop sleeps, so
+    retrying just delays an identical failure. Raised immediately as
+    AgentRateLimitedError instead (src/agent/rate_limiter.py), which
+    src/api/main.py catches and turns into a clear response rather than
+    letting the raw groq.RateLimitError propagate to a bare 500.
     """
     for attempt in range(max_retries):
         try:
             return model.invoke(messages)
         except APIStatusError as exc:
+            if exc.status_code == 429 and is_daily_quota_error(exc):
+                raise AgentRateLimitedError(str(exc)) from exc
             if exc.status_code == 429 and attempt < max_retries - 1:
                 time.sleep(5 * (attempt + 1))
                 continue
@@ -322,7 +332,9 @@ def _invoke_tool_logic(state: AgentState, model) -> AgentState:
             return {**state, "status": "READY_TO_PROPOSE"}
         raise
 
-    tokens_used = state.get("tokens_used", 0) + _response_tokens(response)
+    call_tokens = _response_tokens(response)
+    daily_token_tracker.record_usage(call_tokens)
+    tokens_used = state.get("tokens_used", 0) + call_tokens
     messages = state["messages"] + [response]
 
     if not response.tool_calls or state["hop_count"] >= state["max_hops"]:
@@ -367,6 +379,7 @@ def _propose_resolution_logic(state: AgentState, model) -> AgentState:
 
     for attempt in range(2):
         response = _invoke_with_backoff(model, messages)
+        daily_token_tracker.record_usage(_response_tokens(response))
         tokens_used += _response_tokens(response)
         raw = response.content if isinstance(response.content, str) else str(response.content)
         try:
@@ -467,6 +480,15 @@ def diagnose_discrepancy(record: DiscrepancyRecord) -> tuple[AgentResolution, di
     carries hop_count/tool_call_history/status/raw_failure/tokens_used for
     logging and test assertions.
 
+    Raises AgentRateLimitedError (src/agent/rate_limiter.py), with zero
+    network calls, if this process's own tracked usage today is already
+    within the safety margin of Groq's daily token cap -- callers (Layer 6's
+    trigger_batch_run) catch this and return a clear, honest response
+    instead of an opaque 500. Only reached on a live call: diagnose_or_replay
+    (src/agent/run_log.py) checks the cache first and never calls this
+    function at all on a cache hit, so the frozen dataset's fully-cached
+    path is unaffected by quota regardless of remaining budget.
+
     tokens_used is real usage.total_tokens summed across every live model
     call made for this record (classify+invoke_tool hops and both
     propose_resolution attempts), read from Groq's own response accounting
@@ -475,6 +497,8 @@ def diagnose_discrepancy(record: DiscrepancyRecord) -> tuple[AgentResolution, di
     the ~4,400/~11,700-per-record-run *estimates* the project ran on before
     this was added (see AGENT_LOGIC_VERSION's docstring history above).
     """
+    daily_token_tracker.check_budget()
+
     global _diagnostic_workflow
     if _diagnostic_workflow is None:
         _diagnostic_workflow = _build_graph()

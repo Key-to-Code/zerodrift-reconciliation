@@ -43,7 +43,7 @@ from pathlib import Path
 import httpx
 import pytest
 from dotenv import load_dotenv
-from groq import BadRequestError
+from groq import BadRequestError, RateLimitError
 from langchain_core.messages import AIMessage
 
 load_dotenv()
@@ -59,9 +59,11 @@ from src.agent.graph import (
     AgentState,
     MAX_TOOL_CALLS,
     _invoke_tool_logic,
+    _invoke_with_backoff,
     _propose_resolution_logic,
     gatekeeper_check,
 )
+from src.agent.rate_limiter import AgentRateLimitedError
 from src.agent.resolution import AgentResolution
 from src.agent.run_log import diagnose_or_replay
 from src.data.models import BankStatementLine, GatewaySettlement, GroundTruthEntry, InternalOrder
@@ -460,6 +462,51 @@ def test_invoke_tool_reraises_unrelated_api_errors():
     state = _fresh_state()
     with pytest.raises(BadRequestError):
         _invoke_tool_logic(state, _StubModel())
+
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC tests -- _invoke_with_backoff's TPD-vs-TPM branching
+# (src/agent/rate_limiter.py, added 2026-09-03 after a live debugging
+# session found a daily-quota 429 propagating uncaught to a bare 500 at the
+# API layer). No network -- a stub model raises a pre-built groq error.
+# ---------------------------------------------------------------------------
+
+def _rate_limit_error(message: str) -> RateLimitError:
+    resp = httpx.Response(429, request=httpx.Request("POST", "http://x"), json={"error": {"message": message}})
+    return RateLimitError(message, response=resp, body=None)
+
+
+def test_backoff_raises_immediately_on_daily_quota_429_without_retrying():
+    calls: list[int] = []
+
+    class _StubModel:
+        def invoke(self, messages):
+            calls.append(1)
+            raise _rate_limit_error(
+                "Rate limit reached ... on tokens per day (TPD): Limit 200000, Used 198791, Requested 2195."
+            )
+
+    with pytest.raises(AgentRateLimitedError):
+        _invoke_with_backoff(_StubModel(), [], max_retries=4)
+    assert len(calls) == 1, "a daily-quota 429 must not be retried -- it will not clear in a few seconds"
+
+
+def test_backoff_still_retries_per_minute_429_as_before(monkeypatch):
+    monkeypatch.setattr("src.agent.graph.time.sleep", lambda seconds: None)  # skip the real 5s/10s backoff delay
+    calls: list[int] = []
+
+    class _StubModel:
+        def invoke(self, messages):
+            calls.append(1)
+            if len(calls) < 3:
+                raise _rate_limit_error(
+                    "Rate limit reached ... on tokens per minute (TPM): Limit 8000, Used 7912, Requested 500."
+                )
+            return AIMessage(content="ok", tool_calls=[])
+
+    result = _invoke_with_backoff(_StubModel(), [], max_retries=4)
+    assert result.content == "ok"
+    assert len(calls) == 3, "a per-minute 429 must still be retried with backoff, unchanged from before"
 
 
 def test_gatekeeper_rejects_evidence_not_backed_by_real_tool_history():

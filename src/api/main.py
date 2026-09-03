@@ -30,6 +30,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.agent.rate_limiter import AgentRateLimitedError
 from src.data.generator import generate_batch
 from src.data.models import BankStatementLine, GatewaySettlement, InternalOrder
 from src.forecast.cashflow import project_cashflow
@@ -196,9 +197,19 @@ def trigger_batch_run(
 ) -> BatchRunSummaryResponse:
     batch_run_id = uuid.uuid4()
     orders, settlements, bank_lines = _load_for_recipe(req.model_dump())
-    summary = run_batch(
-        session, batch_run_id, orders, settlements, bank_lines, diagnose_fn=diagnose_fn, as_of=req.as_of
-    )
+    try:
+        summary = run_batch(
+            session, batch_run_id, orders, settlements, bank_lines, diagnose_fn=diagnose_fn, as_of=req.as_of
+        )
+    except AgentRateLimitedError as exc:
+        # Real, diagnosed cause (2026-09-03 debugging session): only the
+        # source="seed" path can reach here -- source="frozen" (or seed=42,
+        # records=100, which regenerates the same data byte-for-byte) never
+        # calls the live model at all, since every one of its discrepancy
+        # records already has a cache hit (src/agent/run_log.py). Without
+        # this, the underlying groq.RateLimitError propagated uncaught to a
+        # bare 500 with the real reason hidden from the caller.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     _BATCH_RUN_REGISTRY[batch_run_id] = {"source": req.source, "seed": req.seed, "records": req.records}
     return BatchRunSummaryResponse(
         batch_run_id=str(batch_run_id),
