@@ -4,6 +4,23 @@ An AI-assisted reconciliation engine that matches orders, gateway settlements, a
 
 The full scorecard (deterministic results plus the agent's min/median/max across live runs) goes here once Layer 9 wraps and `evaluate.py` has run against the frozen dataset. Until then, this section is a running log of real decisions made while building it ,what changed, why, and what it means for anyone rerunning this.
 
+## Running locally
+
+```
+docker compose up -d          # Postgres only -- see docker-compose.yml
+source venv/Scripts/activate  # or venv/bin/activate on macOS/Linux
+uvicorn src.api.main:app --reload --port 8000
+streamlit run src/dashboard/app.py
+```
+
+The API applies `src/ledger/db_schema.sql` to the `finance_controller`
+database itself on startup if the schema isn't already there (see
+`ensure_schema_exists` in `src/ledger/models.py`) -- so a fresh
+`docker compose up` (or a `docker compose down -v` reset) doesn't need a
+manual `psql -f db_schema.sql` step; the first `uvicorn` start creates it.
+`pytest` never touches this database -- it provisions and resets its own
+`finance_controller_test` database (`tests/conftest.py`).
+
 ## A couple of things worth knowing before you dig in
 
 **The agent was built and tested on an open-source model, not Claude, here's why.** Claude is the model this is actually designed for; the only Razorpay-internal fact this project leans on is that Agent Studio runs on Anthropic's Claude Agent SDK, and that's the track this build targets. But iterating on an agent means a lot of calls ,many records, retries, repeated test runs while things are still being debugged ,and that volume doesn't fit inside free Anthropic Console credits. So development runs on Groq's free tier instead, using `openai/gpt-oss-120b`.

@@ -82,3 +82,58 @@ COLOR_STATUS_NOTICE_SUBTLE = f"color-mix(in srgb, {COLOR_STATUS_NOTICE} 12%, whi
 # not a Blade token (Blade's shadow scale wasn't part of the original
 # fetch); a conventional, restrained low-elevation shadow.
 SHADOW_HOVER = "0 4px 12px rgba(5, 5, 5, 0.10)"
+
+# -- Mockup-replication pass ("ZeroDrift Dashboard.dc.html", user-supplied,
+# read in full in the conversation this session continues) ----------------
+# Everything below is copied directly from that file's <style> block and
+# inline styles, NOT independently re-verified against Blade -- the user
+# supplied this exact palette/spacing as the design of record for this pass
+# and it deliberately overrides a few of the Blade-sourced values above
+# where they conflict (most notably COLOR_STATUS_INFORMATION: the mockup
+# uses a purple #5B4FCF for "Agent Resolved"/projected, not Blade's sapphire
+# #0070A8). The overrides are applied explicitly below, not silently, so a
+# reader can see both the original Blade fetch and what superseded it.
+MOCKUP_COLOR_PAGE_BACKGROUND = "#F7F8FA"
+MOCKUP_COLOR_CARD_BACKGROUND = "#FFFFFF"
+MOCKUP_COLOR_BORDER = "#E4E7EC"
+MOCKUP_COLOR_BORDER_SUBTLE = "#EEF0F3"
+MOCKUP_COLOR_TEXT_DARK = "#12151C"
+MOCKUP_COLOR_TEXT_MUTED = "#5B6472"
+MOCKUP_COLOR_TEXT_FAINT = "#9AA3B2"
+MOCKUP_COLOR_TEXT_DISABLED = "#C7CCD6"
+MOCKUP_COLOR_LINK_HOVER = "#0E4FC2"
+
+MOCKUP_COLOR_SUCCESS = "#1B7A43"       # fast path / confirmed cash
+MOCKUP_COLOR_INFO_PURPLE = "#5B4FCF"   # agent resolved / projected cash -- REPLACES COLOR_STATUS_INFORMATION for this role
+MOCKUP_COLOR_CAUTION_TEXT = "#8A5A00"  # honest exception / category pill text
+MOCKUP_COLOR_CAUTION_BG = "#FEF7E8"
+MOCKUP_COLOR_CAUTION_BORDER = "#F3DFAF"
+MOCKUP_COLOR_SUCCESS_BANNER_BG = "#F0FBF4"
+MOCKUP_COLOR_SUCCESS_BANNER_BORDER = "#C9EBD4"
+MOCKUP_COLOR_RUN_BADGE_BG = "#F0F4FF"
+MOCKUP_COLOR_RUN_BADGE_BORDER = "#DCE6FF"
+MOCKUP_COLOR_NAV_ACTIVE_BG = "#F0F4FF"
+
+MOCKUP_SIDEBAR_WIDTH_PX = 232
+
+# The mockup's own font stack -- Inter (UI text) + Roboto Mono (numbers,
+# tabular-nums), via Google Fonts, replacing the earlier Blade FONT_MONO
+# stack (Menlo/Roboto Mono/Courier New) for anything styled ".mono" in this
+# pass specifically.
+MOCKUP_FONT_TEXT = "'Inter', system-ui, sans-serif"
+MOCKUP_FONT_MONO = "'Roboto Mono', ui-monospace, Menlo, monospace"
+MOCKUP_GOOGLE_FONTS_IMPORT = (
+    "https://fonts.googleapis.com/css2?"
+    "family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap"
+)
+
+# Effective status-color role bindings for this pass -- the mockup's values
+# win over the earlier Blade fetch wherever they conflict (all three, not
+# just information/purple: success and caution are also different literal
+# hexes in the mockup). Everything in theme.py/app.py that colors the
+# fast_path/agent_resolved/honest_exception roles uses these three, not the
+# raw COLOR_STATUS_* constants above, so there is exactly one place this
+# ever gets re-pointed.
+ACTIVE_COLOR_SUCCESS = MOCKUP_COLOR_SUCCESS
+ACTIVE_COLOR_INFO = MOCKUP_COLOR_INFO_PURPLE
+ACTIVE_COLOR_CAUTION = MOCKUP_COLOR_CAUTION_TEXT

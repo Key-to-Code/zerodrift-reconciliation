@@ -721,3 +721,30 @@ def date_plus_two(iso: str):
 
     y, m, d = map(int, iso.split("-"))
     return date(y, m, d) + timedelta(days=2)
+
+
+# ---------------------------------------------------------------------------
+# _should_apply_schema_on_startup -- the guard that keeps the app's
+# startup schema-check (lifespan, wired around ensure_schema_exists) from
+# ever running against the real finance_controller database during a test
+# run. Every fixture above overrides get_session before constructing
+# TestClient(app), which is exactly the condition this checks; a direct,
+# synchronous unit test of the guard itself, not the async lifespan
+# wrapper -- see src/api/main.py's lifespan docstring for why.
+# ---------------------------------------------------------------------------
+
+def test_should_apply_schema_on_startup_true_when_get_session_is_not_overridden():
+    from src.api.main import _should_apply_schema_on_startup, app, get_session
+
+    app.dependency_overrides.pop(get_session, None)
+    assert _should_apply_schema_on_startup(app) is True
+
+
+def test_should_apply_schema_on_startup_false_when_get_session_is_overridden():
+    from src.api.main import _should_apply_schema_on_startup, app, get_session
+
+    app.dependency_overrides[get_session] = lambda: None
+    try:
+        assert _should_apply_schema_on_startup(app) is False
+    finally:
+        app.dependency_overrides.pop(get_session, None)

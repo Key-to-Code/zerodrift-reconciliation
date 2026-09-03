@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from src.common.money import from_paise, to_paise
+from src.common.money import format_inr, from_paise, to_paise
 from src.common.calendar import add_business_days, business_days_between, is_business_day
 
 
@@ -131,3 +131,38 @@ def test_business_days_between_naive_calendar_day_window_would_be_wrong():
     raw_calendar_days = (end - start).days
     assert raw_calendar_days == 4
     assert business_days_between(start, end) == 2
+
+
+# ---------------------------------------------------------------------------
+# format_inr -- Indian digit grouping (2,2,3 -- lakh/crore), for the
+# dashboard's mockup-replication pass. Presentation only, never used on a
+# money-math path.
+# ---------------------------------------------------------------------------
+
+def test_format_inr_lakh_range_value():
+    assert format_inr(Decimal("482300.00")) == "4,82,300.00"
+
+
+def test_format_inr_below_first_grouping_boundary():
+    assert format_inr(Decimal("1000.00")) == "1,000.00"
+
+
+def test_format_inr_three_digits_or_fewer_ungrouped():
+    assert format_inr(Decimal("300.00")) == "300.00"
+
+
+def test_format_inr_crore_range_value():
+    assert format_inr(Decimal("12345678.00")) == "1,23,45,678.00"
+
+
+def test_format_inr_negative_value_keeps_sign_before_grouping():
+    assert format_inr(Decimal("-68400.00")) == "-68,400.00"
+
+
+def test_format_inr_zero():
+    assert format_inr(Decimal("0.00")) == "0.00"
+
+
+def test_format_inr_rejects_float_input():
+    with pytest.raises(TypeError):
+        format_inr(482300.00)

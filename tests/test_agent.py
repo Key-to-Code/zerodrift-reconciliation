@@ -36,6 +36,7 @@ guard for that exact bug.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -615,3 +616,62 @@ def test_system_prompt_excludes_final_answer_schema():
     for marker in ('"root_cause_code"', '"quantified_delta_paise"', '"evidence_tool_calls"'):
         assert marker not in graph.SYSTEM_PROMPT, f"{marker} leaked back into the tool-bound SYSTEM_PROMPT"
         assert marker in graph.FINAL_ANSWER_INSTRUCTION
+
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC tests 16-17 -- graph.py loads .env itself now, not just this
+# test file (real bug: a real GROQ_API_KEY sitting in .env never reached a
+# plain `uvicorn` process, which has no test file's module-level load_dotenv()
+# to do it for it -- see graph.py's own comment on the load_dotenv() call).
+# Uses a throwaway temp .env, never the real committed one -- must pass on a
+# machine with no real Groq key at all, same as CI.
+# ---------------------------------------------------------------------------
+
+def test_graph_module_calls_load_dotenv_and_build_model_then_succeeds(monkeypatch):
+    """graph.py's own module-level load_dotenv() call is the actual fix for
+    the real bug (a real GROQ_API_KEY sitting in .env never reached a plain
+    `uvicorn` process, which has no test file's module-level load_dotenv()
+    to do it for it). Spies on dotenv.load_dotenv itself rather than trying
+    to redirect python-dotenv's own file-discovery -- confirmed by hand
+    while writing this test that python-dotenv's default find_dotenv()
+    resolves relative to the CALLING file's location via stack inspection
+    (i.e. always finds this repo's real D:\\...\\.env, since it walks up from
+    src/agent/graph.py itself), NOT os.getcwd() -- so monkeypatch.chdir()
+    alone cannot redirect it, and trying to would either miss the point or
+    require writing a file into the real source tree. Spying on whether
+    dotenv.load_dotenv() gets called, and that a key present in os.environ
+    afterward lets _build_model() succeed, tests the actual integration
+    without re-testing python-dotenv's own (well-tested) file lookup."""
+    import importlib
+
+    import dotenv
+
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    calls = []
+
+    def spy_load_dotenv(*args, **kwargs):
+        calls.append((args, kwargs))
+        monkeypatch.setenv("GROQ_API_KEY", "test-key-from-dotenv")
+
+    monkeypatch.setattr(dotenv, "load_dotenv", spy_load_dotenv)
+    try:
+        importlib.reload(graph)  # re-executes `from dotenv import load_dotenv; load_dotenv()`
+        assert calls, "graph.py's module-level code must call dotenv.load_dotenv()"
+        assert os.environ.get("GROQ_API_KEY") == "test-key-from-dotenv"
+        graph._build_model()  # constructs a ChatGroq client; must not raise -- no network call happens here
+    finally:
+        monkeypatch.setattr(dotenv, "load_dotenv", dotenv.load_dotenv)  # harmless no-op if never patched
+        importlib.reload(graph)  # restore graph's real dotenv binding + real .env state for later tests
+
+
+def test_build_model_still_raises_a_clear_error_with_no_key_anywhere(monkeypatch):
+    """Regression guard for the failure mode itself: CLAUDE.md forbids
+    silently faking a model client -- a genuinely missing key must still
+    fail loudly, not construct a client that would error confusingly deep
+    inside a live call instead. _build_model() reads os.environ directly and
+    never calls load_dotenv() itself (only this module's import-time call
+    does, tested above), so deleting the env var alone is a complete,
+    reload-free test of this path."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GROQ_API_KEY not set"):
+        graph._build_model()

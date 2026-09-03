@@ -23,6 +23,20 @@ import httpx
 
 DEFAULT_BASE_URL = os.environ.get("DASHBOARD_API_BASE_URL", "http://localhost:8000")
 
+# A `source="seed"` trigger runs the real agent synchronously, in-process,
+# for every non-fast-path record before the HTTP response returns (the
+# architecture's own single-ACID-transaction design, CLAUDE.md Sec.2 -- this
+# is not a bug to route around with a background job/queue, which CLAUDE.md
+# Sec.7 explicitly forbids). For the documented ~100-record default batch
+# with up to ~37 records needing real diagnosis, plus Groq's own per-minute
+# rate-limit backoff (src/agent/graph.py's _invoke_with_backoff) on top,
+# this can genuinely take several minutes -- the client's general 30s
+# timeout (fine for every other, always-fast DB-read endpoint) was silently
+# too short for the one endpoint the UI's own "this may take a minute..."
+# copy already promised more time for. A much larger custom "Records" value
+# on the Run screen's live-seed card could still exceed even this.
+TRIGGER_BATCH_RUN_TIMEOUT_SECONDS = 600.0
+
 
 def _default_client_factory() -> httpx.Client:
     return httpx.Client(base_url=DEFAULT_BASE_URL, timeout=30.0)
@@ -64,7 +78,7 @@ def trigger_batch_run(source: str, seed: int | None = None, records: int = 100, 
     body = {"source": source, "seed": seed, "records": records}
     if as_of is not None:
         body["as_of"] = as_of.isoformat()
-    resp = get_client().post("/batch-runs", json=body)
+    resp = get_client().post("/batch-runs", json=body, timeout=TRIGGER_BATCH_RUN_TIMEOUT_SECONDS)
     _raise_for_status(resp)
     return resp.json()
 
@@ -142,6 +156,17 @@ def parse_confidence_note_reason(confidence_note: str | None) -> str:
     parts = [p.strip() for p in confidence_note.split(";")]
     tail = [p for p in parts if p and "=" not in p]
     return "; ".join(tail)
+
+
+def humanize_category(raw_category: str) -> str:
+    """Presentational-only sentence-case transform of a real category string
+    ("adversarial_trap" -> "Adversarial trap") for the category pill --
+    never invents a category, just reformats the one parse_confidence_note_
+    category already extracted. "unknown" stays "Unknown"."""
+    if not raw_category:
+        return "Unknown"
+    spaced = raw_category.replace("_", " ")
+    return spaced[:1].upper() + spaced[1:]
 
 
 def build_forecast_chart_data(forecast_rows: list[dict], as_of: date) -> dict[str, dict[str, int]]:

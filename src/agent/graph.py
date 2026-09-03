@@ -40,6 +40,7 @@ import os
 import time
 from typing import Any, TypedDict
 
+from dotenv import load_dotenv
 from groq import APIStatusError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
@@ -49,6 +50,19 @@ from pydantic import ValidationError
 from src.agent.discrepancy import DiscrepancyRecord
 from src.agent.resolution import AgentResolution
 from src.agent.tools import TOOL_REGISTRY, get_tax_rules, query_merchant_contract, check_settlement_timing
+
+# python-dotenv is a declared dependency (requirements.txt) that was never
+# actually wired up here -- tests/test_agent.py has always called
+# load_dotenv() itself before importing this module, which is exactly why
+# live tests worked while a real `uvicorn` process (no test file's
+# module-level code to do it for them) hit "GROQ_API_KEY not set" below even
+# with a real key sitting in .env. Belongs here, not just in main.py's
+# startup, so any entrypoint that imports this module (a future evaluate.py
+# script, a REPL, tests that don't already load it) gets it too. Does not
+# override an already-set real environment variable (python-dotenv's
+# default), so a production deployment's real env var still wins over a
+# stray local .env file.
+load_dotenv()
 
 MAX_TOOL_CALLS = 3
 GROQ_MODEL = "openai/gpt-oss-120b"

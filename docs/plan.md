@@ -1,4 +1,4 @@
-# AI Finance Controller — Complete Build Plan (v2, audit-integrated)
+# ZeroDrift — Complete Build Plan (v2, audit-integrated)
 ### Razorpay Buildathon Track 04 · For execution by Claude Code
 
 **Read this whole file, and `CLAUDE.md`, before writing any code.** Build strictly in
