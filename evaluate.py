@@ -417,6 +417,15 @@ def main() -> None:
     parser.add_argument(
         "--skip-agent-block", action="store_true", help="Only run the deterministic block (no live agent calls)."
     )
+    parser.add_argument(
+        "--run-index",
+        type=int,
+        default=None,
+        help="Run only this one 1-based agent-block sweep index, writing to <seed>_<run-index>.jsonl, instead of "
+        "looping 1..--runs in a single invocation. For spreading the required independent runs across multiple "
+        "days under a daily token cap (see docs/plan.md Layer 8's methodology note) -- e.g. --run-index 1 today, "
+        "--run-index 2 tomorrow, --run-index 3 the day after, then score all three together with --replay.",
+    )
     args = parser.parse_args()
 
     if args.seed is None:
@@ -447,6 +456,16 @@ def main() -> None:
 
     records = build_discrepancy_queue(orders, settlements, bank_lines)
     seed_label = args.seed if args.seed is not None else "frozen"
+
+    if args.run_index is not None:
+        log_path = AGENT_RUNS_DIR / f"{seed_label}_{args.run_index}.jsonl"
+        resolutions = run_agent_block_once(records, diagnose_discrepancy, log_path, AGENT_LOGIC_VERSION)
+        print()
+        print(f"Agent-block run {args.run_index} complete: {len(resolutions)} resolutions logged to {log_path}")
+        print("Run the remaining sweep(s) on other days with --run-index, then score all of them together "
+              f"via --replay data/agent_runs/{seed_label} --runs <n>.")
+        return
+
     run_resolutions = []
     for i in range(1, args.runs + 1):
         log_path = AGENT_RUNS_DIR / f"{seed_label}_{i}.jsonl"
