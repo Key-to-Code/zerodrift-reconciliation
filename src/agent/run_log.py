@@ -89,6 +89,50 @@ def total_tokens_used(log_path: Path) -> int:
     return sum(entry["debug_info"].get("tokens_used", 0) for entry in load_run_log(log_path).values())
 
 
+def count_live_calls_needed(records: list[DiscrepancyRecord], log_path: Path, logic_version: int) -> int:
+    """How many of `records` would actually require a live model call --
+    i.e. have no entry in log_path whose record_content_hash AND
+    logic_version both match -- without calling the model or touching the
+    network to find out. Mirrors diagnose_or_replay's own cache-hit check
+    exactly, so a batch scored as "0 live calls needed" here really is a
+    guaranteed zero live calls when actually run (e.g. the frozen dataset,
+    always fully cached, regardless of remaining daily budget).
+
+    Used as the pre-flight input to src.agent.rate_limiter.check_budget_for_batch,
+    added after a live debugging session found that hitting the daily quota
+    mid-seed-batch crashed with some records already posted to the ledger --
+    the fix estimates cost BEFORE any DB write, not just before each
+    individual live call (src.agent.graph.diagnose_discrepancy's own
+    per-record check_budget, which is too late to avoid partial progress)."""
+    cached = load_run_log(log_path)
+    needed = 0
+    for record in records:
+        entry = cached.get(record_key(record))
+        if entry is None or entry["record_content_hash"] != _record_content_hash(record) or entry["logic_version"] != logic_version:
+            needed += 1
+    return needed
+
+
+def average_real_tokens_per_live_call(log_paths: list[Path], default: float = 7000.0) -> float:
+    """Real average tokens_used across every real (nonzero, i.e. actually
+    live-called, not cache-replayed) logged invocation across the given log
+    files -- never a hardcoded guess. `default` is used only if NO real
+    measurement exists anywhere yet (a fresh checkout before any live call
+    has ever been logged) -- 7000 is today's real observed average from
+    data/agent_runs/frozen_1.jsonl (256,504 tokens / 37 records), used only
+    as that one-time bootstrap value, not as an ongoing estimate once real
+    data exists."""
+    totals = [
+        entry["debug_info"]["tokens_used"]
+        for path in log_paths
+        for entry in load_run_log(path).values()
+        if entry["debug_info"].get("tokens_used", 0) > 0
+    ]
+    if not totals:
+        return default
+    return sum(totals) / len(totals)
+
+
 def diagnose_or_replay(
     record: DiscrepancyRecord, log_path: Path, logic_version: int
 ) -> tuple[AgentResolution, dict, bool]:

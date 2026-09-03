@@ -545,6 +545,75 @@ def test_trigger_batch_run_surfaces_clean_503_on_agent_rate_limit(client):
 
 
 # ---------------------------------------------------------------------------
+# run_batch's pre-flight budget check (src/orchestration/batch_runner.py
+# addendum, 2026-09-03): exercises the REAL default diagnose_fn path (no
+# dependency override) against records guaranteed uncached at an isolated
+# tmp_path cache file, with the real daily_token_tracker singleton
+# pre-loaded near-exhaustion to force the check to fire. Proves the whole
+# point of moving this check before Stage 1: zero rows written anywhere.
+# ---------------------------------------------------------------------------
+
+def test_run_batch_preflight_blocks_before_any_posting_when_budget_insufficient(db_session, tmp_path):
+    from src.agent.rate_limiter import DAILY_TOKEN_BUDGET, AgentRateLimitedError, daily_token_tracker
+    from src.data.generator import generate_batch
+
+    batch_run_id = uuid.uuid4()
+    batch = generate_batch(num_records=10, seed=424242)  # verified: 3 records need diagnosis, none ever cached
+    empty_cache = tmp_path / "empty_cache.jsonl"
+
+    daily_token_tracker.reset_for_testing()
+    daily_token_tracker.record_usage(DAILY_TOKEN_BUDGET)  # simulate a fully exhausted day
+    try:
+        with pytest.raises(AgentRateLimitedError, match="estimated"):
+            run_batch(
+                db_session, batch_run_id, batch.orders, batch.settlements, batch.bank_lines,
+                agent_cache_path=empty_cache,
+            )
+    finally:
+        daily_token_tracker.reset_for_testing()
+
+    assert not empty_cache.exists(), "no live call (and therefore no cache write) should ever have been attempted"
+    entries = db_session.execute(
+        select(JournalEntry).where(JournalEntry.batch_run_id == batch_run_id)
+    ).scalars().all()
+    matches = db_session.execute(
+        select(ReconciliationMatch).where(ReconciliationMatch.batch_run_id == batch_run_id)
+    ).scalars().all()
+    assert entries == [], "Stage 1 capture must not have posted anything -- the check runs before it now"
+    assert matches == []
+
+
+def test_run_batch_preflight_ignores_as_of_gated_records(db_session, tmp_path):
+    """A record whose settlement/bank-credit postdates as_of never reaches
+    diagnose_fn at all (the as_of addendum above) -- it must not count
+    toward the pre-flight estimate either, or an as_of-limited run could be
+    blocked by budget it will never actually spend."""
+    from datetime import date as _date
+
+    from src.agent.rate_limiter import DAILY_TOKEN_BUDGET, daily_token_tracker
+    from src.data.generator import generate_batch
+
+    batch_run_id = uuid.uuid4()
+    batch = generate_batch(num_records=10, seed=424242)
+    empty_cache = tmp_path / "empty_cache.jsonl"
+
+    daily_token_tracker.reset_for_testing()
+    daily_token_tracker.record_usage(DAILY_TOKEN_BUDGET)  # exhausted -- would block if anything were counted
+    try:
+        # as_of before the dataset's own window (2025-01-06 onward) gates every
+        # settlement/bank-credit out, so 0 records actually need diagnosis --
+        # must proceed (posting only Stage 1 captures), not raise.
+        summary = run_batch(
+            db_session, batch_run_id, batch.orders, batch.settlements, batch.bank_lines,
+            agent_cache_path=empty_cache, as_of=_date(2020, 1, 1),
+        )
+    finally:
+        daily_token_tracker.reset_for_testing()
+
+    assert summary.total_orders == len(batch.orders)
+
+
+# ---------------------------------------------------------------------------
 # Tests 16-20 -- as_of-gated Stage 2 posting (Layer 6 addendum, approved
 # after Layer 7: see src/orchestration/batch_runner.py's module docstring
 # for why this exists -- without it, project_cashflow()'s "projected"

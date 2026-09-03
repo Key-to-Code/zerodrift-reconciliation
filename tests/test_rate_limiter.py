@@ -16,6 +16,8 @@ from src.agent.rate_limiter import (
     SAFETY_MARGIN_TOKENS,
     AgentRateLimitedError,
     _DailyTokenTracker,
+    check_budget_for_batch,
+    daily_token_tracker,
     is_daily_quota_error,
 )
 
@@ -143,3 +145,40 @@ def test_reset_for_testing_clears_usage():
     tracker.record_usage(5000)
     tracker.reset_for_testing()
     assert tracker.used_today() == 0
+
+
+# ---------------------------------------------------------------------------
+# check_budget_for_batch: the pre-flight, whole-batch check
+# (src/orchestration/batch_runner.py's addendum, 2026-09-03) -- operates on
+# the REAL module-level daily_token_tracker singleton, since that's what
+# run_batch actually consults; each test resets it in a finally block so
+# these can't leak state into any other test in the same pytest session.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _reset_shared_tracker():
+    daily_token_tracker.reset_for_testing()
+    yield
+    daily_token_tracker.reset_for_testing()
+
+
+def test_check_budget_for_batch_zero_needed_never_raises_even_when_exhausted():
+    daily_token_tracker.record_usage(DAILY_TOKEN_BUDGET)  # fully exhausted
+    check_budget_for_batch(n_live_calls_needed=0, avg_tokens_per_call=7000.0)  # must not raise
+
+
+def test_check_budget_for_batch_passes_when_estimate_fits():
+    daily_token_tracker.record_usage(1000)
+    check_budget_for_batch(n_live_calls_needed=3, avg_tokens_per_call=7000.0)  # ~21000, plenty remains
+
+
+def test_check_budget_for_batch_raises_when_estimate_exceeds_remaining():
+    daily_token_tracker.record_usage(DAILY_TOKEN_BUDGET - 5000)  # only 5000 left
+    with pytest.raises(AgentRateLimitedError, match="estimated"):
+        check_budget_for_batch(n_live_calls_needed=3, avg_tokens_per_call=7000.0)  # needs ~21000
+
+
+def test_check_budget_for_batch_error_names_the_frozen_dataset_fallback():
+    daily_token_tracker.record_usage(DAILY_TOKEN_BUDGET)
+    with pytest.raises(AgentRateLimitedError, match="frozen"):
+        check_budget_for_batch(n_live_calls_needed=1, avg_tokens_per_call=7000.0)

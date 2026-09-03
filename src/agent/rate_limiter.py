@@ -28,6 +28,7 @@ returns (src/agent/graph.py's _response_tokens).
 """
 from __future__ import annotations
 
+import math
 import threading
 from datetime import datetime, timezone
 
@@ -99,6 +100,43 @@ class _DailyTokenTracker:
 
 
 daily_token_tracker = _DailyTokenTracker()
+
+
+def check_budget_for_batch(n_live_calls_needed: int, avg_tokens_per_call: float) -> None:
+    """Pre-flight check for an entire batch, called BEFORE any ledger
+    posting begins -- not just before each individual live call (that's
+    diagnose_discrepancy's own per-record check_budget, which by definition
+    can only fire after some earlier records in the same batch have already
+    been posted). Added after a live debugging session found that hitting
+    the daily quota mid-seed-batch crashed with partial progress already
+    committed -- there was no soft landing for a seed batch (unlike the
+    frozen path's cache/replay safety net) once a live call became
+    necessary.
+
+    n_live_calls_needed=0 (e.g. the frozen dataset, always fully cached, or
+    a seed recipe that happens to already be fully cached) never raises,
+    regardless of remaining budget -- quota is simply irrelevant when zero
+    live calls will actually be attempted.
+
+    Deliberately does NOT estimate a wait time: Groq's window is rolling,
+    not a fixed reset, and this process has no way to know how much of
+    today's usage will age out by when -- inventing an ETA would violate
+    CLAUDE.md Sec.1 (never state a number not actually derived). The
+    message instead points at the real, always-available alternative.
+    """
+    if n_live_calls_needed <= 0:
+        return
+    estimated_tokens = math.ceil(n_live_calls_needed * avg_tokens_per_call)
+    remaining = daily_token_tracker.remaining()
+    if estimated_tokens > remaining:
+        raise AgentRateLimitedError(
+            f"This batch needs an estimated {estimated_tokens} tokens ({n_live_calls_needed} records "
+            f"needing live agent diagnosis x ~{avg_tokens_per_call:.0f} tokens/record, the real measured "
+            f"average) for its live agent phase, but only {remaining} remain in today's local budget "
+            "tracking -- refusing to start rather than fail partway through with some records already "
+            "posted. Use source='frozen' (seed=42, records=100), which needs zero live calls, reduce "
+            "records, or retry once more of today's usage has aged out of Groq's rolling daily window."
+        )
 
 
 def is_daily_quota_error(exc: Exception) -> bool:

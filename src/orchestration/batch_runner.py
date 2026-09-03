@@ -58,6 +58,26 @@ yet reconciled -- picked up by a later run once `as_of` (or an unspecified
 run) advances past it. `as_of=None` (the default) disables the cutoff
 entirely and reproduces the original, unconditional behavior byte-for-byte --
 every existing test and the frozen dataset's full pipeline are unaffected.
+
+Pre-flight agent-budget check (addendum, 2026-09-03 -- disclosed here, same
+pattern as the as_of fix): a live debugging session found that hitting
+Groq's daily token cap partway through a seed batch's live agent phase
+crashed with some records already posted (Stage 1 capture, fast-path Stage
+2, and any discrepancy record diagnosed before the one that hit the wall).
+Unlike the frozen path, a seed batch has no cache to fall back on for a
+record it has never seen, so there is no soft landing once a live call
+becomes necessary. Fix: before ANY posting begins, both discrepancy queues
+are built (pure computation) and checked against src/agent/rate_limiter.py's
+daily_token_tracker, counting only records that would (a) actually reach
+diagnose_fn (an as_of-gated record never does) and (b) actually need a live
+call (a cache hit, e.g. the frozen dataset's, needs none) -- multiplied by
+the REAL measured average tokens/record from data/agent_runs/ (never a
+hardcoded guess). If that estimate exceeds the remaining daily budget,
+run_batch raises AgentRateLimitedError immediately, before Stage 1 posting
+even starts, so a batch that won't fit fails with zero rows written rather
+than partway through. This only applies when diagnose_fn is left at its
+default (None) -- an injected diagnose_fn (tests, or a future alternate
+backend) is opaque to this estimate and is never gated by it.
 """
 from __future__ import annotations
 
@@ -224,15 +244,47 @@ def run_batch(
     module docstring's "as_of-gated Stage 2 posting" section. as_of=None
     (the default) posts everything unconditionally, unchanged from the
     original behavior."""
-    if diagnose_fn is None:
-        diagnose_fn = _default_diagnose_fn(agent_cache_path)
-
     orders_by_id = {o.order_id: o for o in orders}
     settlements_by_order = {s.order_id: s for s in settlements}
 
     orders_df = orders_to_frame(orders)
     settlements_df = settlements_to_frame(settlements)
     bank_df = bank_lines_to_frame(bank_lines)
+
+    # Both discrepancy queues are pure computation (no DB writes) -- built
+    # here, before ANY posting, specifically so a pre-flight budget check
+    # can run with zero partial progress to undo if it fails. Reused below
+    # by the actual posting loops instead of being rebuilt inline.
+    settlement_discrepancy_records = build_settlement_discrepancy_queue(orders_df, settlements_df, bank_df)
+    unmatched_records = build_unmatched_bank_line_queue(orders_df, settlements_df, bank_df)
+
+    if diagnose_fn is None:
+        diagnose_fn = _default_diagnose_fn(agent_cache_path)
+        # Pre-flight budget check -- only meaningful for the real default
+        # cache-backed path (an injected diagnose_fn, e.g. a test stub, is
+        # opaque and never touches the real cache/budget anyway). Only
+        # records that would actually be diagnosed matter -- an as_of-gated
+        # record never reaches diagnose_fn at all, so it must not count
+        # toward the estimate (docs/plan.md Layer 6's as_of addendum).
+        # Added after a live debugging session found that hitting the daily
+        # quota mid-seed-batch crashed with some records already posted --
+        # see src/agent/rate_limiter.py::check_budget_for_batch.
+        from src.agent.graph import AGENT_LOGIC_VERSION
+        from src.agent.rate_limiter import check_budget_for_batch
+        from src.agent.run_log import average_real_tokens_per_live_call, count_live_calls_needed
+
+        records_needing_diagnosis = [
+            r
+            for r in settlement_discrepancy_records
+            if not (as_of is not None and settlements_by_order[r.order_context.order_id].settlement_date > as_of)
+        ] + [
+            r
+            for r in unmatched_records
+            if not (as_of is not None and date.fromisoformat(r.bank_credits[0].value_date) > as_of)
+        ]
+        n_live_calls_needed = count_live_calls_needed(records_needing_diagnosis, agent_cache_path, AGENT_LOGIC_VERSION)
+        avg_tokens_per_call = average_real_tokens_per_live_call([agent_cache_path])
+        check_budget_for_batch(n_live_calls_needed, avg_tokens_per_call)
 
     for order in orders:
         post_order_capture(session, batch_run_id, order.order_id, to_paise(order.gross_amount))
@@ -261,7 +313,7 @@ def run_batch(
             )
             fast_path_count += 1
 
-    for record in build_settlement_discrepancy_queue(orders_df, settlements_df, bank_df):
+    for record in settlement_discrepancy_records:
         order_id = record.order_context.order_id
         order = orders_by_id[order_id]
         settlement = settlements_by_order[order_id]
@@ -319,7 +371,6 @@ def run_batch(
             payment_id=settlement.payment_id,
         )
 
-    unmatched_records = build_unmatched_bank_line_queue(orders_df, settlements_df, bank_df)
     for record in unmatched_records:
         bank_credit = record.bank_credits[0]
         if as_of is not None and date.fromisoformat(bank_credit.value_date) > as_of:

@@ -50,7 +50,9 @@ load_dotenv()
 
 from src.agent import graph
 from src.agent.discrepancy import (
+    BankCredit,
     DiscrepancyRecord,
+    OrderContext,
     build_settlement_discrepancy_queue,
     build_unmatched_bank_line_queue,
 )
@@ -65,7 +67,12 @@ from src.agent.graph import (
 )
 from src.agent.rate_limiter import AgentRateLimitedError
 from src.agent.resolution import AgentResolution
-from src.agent.run_log import diagnose_or_replay
+from src.agent.run_log import (
+    append_run_log,
+    average_real_tokens_per_live_call,
+    count_live_calls_needed,
+    diagnose_or_replay,
+)
 from src.data.models import BankStatementLine, GatewaySettlement, GroundTruthEntry, InternalOrder
 from src.matching.schema import bank_lines_to_frame, orders_to_frame, settlements_to_frame
 
@@ -507,6 +514,80 @@ def test_backoff_still_retries_per_minute_429_as_before(monkeypatch):
     result = _invoke_with_backoff(_StubModel(), [], max_retries=4)
     assert result.content == "ok"
     assert len(calls) == 3, "a per-minute 429 must still be retried with backoff, unchanged from before"
+
+
+# ---------------------------------------------------------------------------
+# DETERMINISTIC tests -- count_live_calls_needed / average_real_tokens_per_live_call
+# (src/agent/run_log.py, added 2026-09-03 for run_batch's pre-flight budget
+# check). Pure file/dict lookups against a tmp_path cache file -- no network.
+# ---------------------------------------------------------------------------
+
+def _tiny_record(order_id: str, gross_amount_paise: int = 100_000) -> DiscrepancyRecord:
+    return DiscrepancyRecord(
+        discrepancy_reason="fee_drift",
+        order_context=OrderContext(
+            order_id=order_id,
+            gross_amount_paise=gross_amount_paise,
+            payment_method="amex",
+            timestamp="2025-01-06T10:00:00+05:30",
+            refund_amount_paise=None,
+        ),
+    )
+
+
+def _resolution(root_cause_code: str = "AMEX_SURCHARGE") -> AgentResolution:
+    return AgentResolution(
+        root_cause_code=root_cause_code, quantified_delta_paise=100, evidence_tool_calls=[], confidence_note="stub"
+    )
+
+
+def test_count_live_calls_needed_all_uncached(tmp_path):
+    records = [_tiny_record("ORD_A"), _tiny_record("ORD_B")]
+    empty_cache = tmp_path / "empty.jsonl"
+    assert count_live_calls_needed(records, empty_cache, logic_version=1) == 2
+
+
+def test_count_live_calls_needed_excludes_real_cache_hits(tmp_path):
+    records = [_tiny_record("ORD_A"), _tiny_record("ORD_B")]
+    cache_path = tmp_path / "cache.jsonl"
+    append_run_log(cache_path, records[0], _resolution(), {"tokens_used": 500}, logic_version=1)
+    assert count_live_calls_needed(records, cache_path, logic_version=1) == 1  # ORD_A cached, ORD_B is not
+
+
+def test_count_live_calls_needed_stale_logic_version_counts_as_a_miss(tmp_path):
+    records = [_tiny_record("ORD_A")]
+    cache_path = tmp_path / "cache.jsonl"
+    append_run_log(cache_path, records[0], _resolution(), {"tokens_used": 500}, logic_version=1)
+    assert count_live_calls_needed(records, cache_path, logic_version=2) == 1  # cached under an old logic version
+
+
+def test_count_live_calls_needed_changed_content_counts_as_a_miss(tmp_path):
+    cache_path = tmp_path / "cache.jsonl"
+    append_run_log(cache_path, _tiny_record("ORD_A", gross_amount_paise=100_000), _resolution(), {"tokens_used": 500}, logic_version=1)
+    changed_record = _tiny_record("ORD_A", gross_amount_paise=999_999)  # same order_id, different content
+    assert count_live_calls_needed([changed_record], cache_path, logic_version=1) == 1
+
+
+def test_average_real_tokens_per_live_call_computes_real_average(tmp_path):
+    cache_path = tmp_path / "cache.jsonl"
+    append_run_log(cache_path, _tiny_record("ORD_A"), _resolution(), {"tokens_used": 6000}, logic_version=1)
+    append_run_log(cache_path, _tiny_record("ORD_B"), _resolution(), {"tokens_used": 8000}, logic_version=1)
+    assert average_real_tokens_per_live_call([cache_path]) == 7000.0
+
+
+def test_average_real_tokens_per_live_call_ignores_zero_token_entries(tmp_path):
+    """A zero tokens_used entry means genuinely never measured (e.g. a stub
+    used in an offline test), not a real free call -- must not drag the
+    real average toward zero."""
+    cache_path = tmp_path / "cache.jsonl"
+    append_run_log(cache_path, _tiny_record("ORD_A"), _resolution(), {"tokens_used": 6000}, logic_version=1)
+    append_run_log(cache_path, _tiny_record("ORD_B"), _resolution(), {"tokens_used": 0}, logic_version=1)
+    assert average_real_tokens_per_live_call([cache_path]) == 6000.0
+
+
+def test_average_real_tokens_per_live_call_falls_back_to_default_when_no_real_data():
+    empty_cache = Path("/nonexistent/does/not/exist.jsonl")
+    assert average_real_tokens_per_live_call([empty_cache], default=1234.0) == 1234.0
 
 
 def test_gatekeeper_rejects_evidence_not_backed_by_real_tool_history():
