@@ -17,8 +17,6 @@ def inject_theme() -> None:
         <style>
         @import url('{tokens.MOCKUP_GOOGLE_FONTS_IMPORT}');
 
-        /* -- Mockup-replication pass: page-level base, from the mockup's own
-           <style> block almost verbatim. ------------------------------- */
         .stApp {{
             background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
         }}
@@ -32,20 +30,14 @@ def inject_theme() -> None:
         a {{ color: {tokens.COLOR_PRIMARY}; }}
         a:hover {{ color: {tokens.MOCKUP_COLOR_LINK_HOVER}; }}
 
-        /* Sidebar: 232px, white, right border -- matches the mockup's
-           fixed-width nav rail. Streamlit's own sidebar resize handle still
-           works; this only sets the resting width/look. */
+        /* Sidebar: fixed width; Streamlit's own resize handle still works,
+           this only sets the resting width. */
         section[data-testid="stSidebar"] {{
             width: {tokens.MOCKUP_SIDEBAR_WIDTH_PX}px;
             background-color: {tokens.MOCKUP_COLOR_CARD_BACKGROUND};
             border-right: 1px solid {tokens.MOCKUP_COLOR_BORDER};
         }}
 
-        /* Nav buttons: the active view (session_state.view) gets the
-           active-nav treatment; disabled (no run loaded yet) gets the
-           mockup's faint disabled text color instead of Streamlit's default
-           greyed-out look. */
-        /* Professional Sidebar */
         section[data-testid="stSidebar"] {{
             background-color: {tokens.COLOR_BACKGROUND} !important;
             border-right: 1px solid {tokens.COLOR_BORDER_SUBTLE};
@@ -76,8 +68,6 @@ def inject_theme() -> None:
             font-weight: 600;
         }}
 
-        /* Persistent run badge, shown on every non-Run screen once a run is
-           loaded -- mirrors the mockup's "Viewing run <id>" bar. */
         .run-badge-bar {{
             background-color: {tokens.MOCKUP_COLOR_RUN_BADGE_BG};
             border: 1px solid {tokens.MOCKUP_COLOR_RUN_BADGE_BORDER};
@@ -96,8 +86,6 @@ def inject_theme() -> None:
             font-weight: 600;
         }}
 
-        /* Success banner (run loaded), mirrors the mockup's green confirm
-           box around the "View Overview ->" button. */
         [class*="st-key-run-loaded-banner"] {{
             background-color: {tokens.MOCKUP_COLOR_SUCCESS_BANNER_BG};
             border: 1px solid {tokens.MOCKUP_COLOR_SUCCESS_BANNER_BORDER};
@@ -129,9 +117,6 @@ def inject_theme() -> None:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* -- design.md follow-up (Layer 7 UI pass) ------------------------ */
-
-        /* Run screen: two trigger cards + form configuration cards. */
         [class*="st-key-run-card-"], [class*="st-key-run-form-card"] {{
             background-color: {tokens.COLOR_BACKGROUND};
             border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
@@ -146,7 +131,7 @@ def inject_theme() -> None:
             transform: translateY(-2px);
             border-color: {tokens.MOCKUP_COLOR_BORDER};
         }}
-        /* Decorative Radio buttons - Segemented Pill style */
+        /* Radio buttons styled as a segmented pill. */
         div[data-testid="stRadio"] > div[role="radiogroup"] {{
             display: flex;
             gap: 8px;
@@ -183,7 +168,6 @@ def inject_theme() -> None:
             color: {tokens.COLOR_PRIMARY};
         }}
         
-        /* Expander Styling */
         div[data-testid="stExpander"] {{
             border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
             border-radius: {tokens.RADIUS_MEDIUM}px;
@@ -204,7 +188,8 @@ def inject_theme() -> None:
             padding: 16px 24px;
         }}
 
-        /* Fix Streamlit Popover Dropdowns (Multiselect/Select) */
+        /* Popover dropdowns (multiselect/select) don't inherit the theme
+           by default. */
         div[data-baseweb="popover"] > div {{
             background-color: {tokens.COLOR_BACKGROUND} !important;
             border: 1px solid {tokens.COLOR_BORDER_SUBTLE} !important;
@@ -212,7 +197,6 @@ def inject_theme() -> None:
             box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
         }}
 
-        /* Premium Checkbox Toggle */
         div[data-testid="stCheckbox"] label > div:first-child {{
             border-radius: 99px;
             width: 36px;
@@ -245,8 +229,7 @@ def inject_theme() -> None:
         }}
 
 
-        /* Overview: accent-left-border metric cards with a hover lift, and
-           hovering a stacked-bar segment highlights its matching card --
+        /* Hovering a stacked-bar segment highlights its matching card --
            pure CSS (:has()), no JavaScript. Each status's card and bar
            segment share the "metric-card-<status>"/"bar-segment-<status>"
            name fragment so one selector covers every run's column. */
@@ -314,8 +297,7 @@ def inject_theme() -> None:
             border-color: {tokens.ACTIVE_COLOR_CAUTION};
             transform: translateY(-2px);
         }}
-        
-        /* Highlight bar segment when hovering its card */
+
         [class*="overview-section-"]:has([class*="metric-card-"] div[data-testid="stMetric"]:hover) .stacked-bar > div {{
             opacity: 0.3;
         }}
@@ -332,9 +314,9 @@ def inject_theme() -> None:
             filter: brightness(1.15);
         }}
 
-        /* Exceptions: category pill. All categories share one caution tint
-           (design.md 3.3.2) -- the pill communicates "needs a human," not
-           which category, so one color is correct, not a missing feature. */
+        /* All categories share one caution tint -- the pill communicates
+           "needs a human," not which category, so one color is correct,
+           not a missing feature. */
         .category-pill {{
             display: inline-block;
             background-color: {tokens.MOCKUP_COLOR_CAUTION_BG};
@@ -349,27 +331,18 @@ def inject_theme() -> None:
         /* Grid tables: custom HTML (not st.dataframe -- a Styler can't
            render the ledger TOTAL row's checkmark badge). Shared by the
            Ledger and the Forecast "Show data" table so both read as one
-           consistent component, not two one-off tables.
+           consistent component.
 
-           FIX (2026-09-04): every "row" used to be its OWN independent
-           `display: grid` container. Independent per-row grids each size
-           their fr-columns from THEIR OWN content only -- if one row's
-           content pushed a column past its fr-share (min-content overflow,
-           a routine CSS grid gotcha `minmax(0, Nfr)` avoids but plain `Nfr`
-           does not), that row's column boundaries drift from every other
-           row's, so cells stop lining up down the table ("rows don't end
-           at the same place" -- real, reported bug). Fixed by making the
-           TABLE ITSELF the one shared grid (every cell div is now a direct
-           child, no per-row wrapper) so column tracks are computed ONCE,
-           from the widest content across every row combined, and every
-           row's cells snap to those exact shared boundaries -- this is
-           the only way two independent rows can be guaranteed pixel-
-           identical column widths in CSS grid. Per-row background/border
-           (header/total-row shading) moves onto each cell individually
-           (.ledger-cell-header / .ledger-total-row on every cell of that
-           logical row) since a shared grid has no per-row box to paint --
-           contiguous cells sharing a background produces the same visual
-           band with the added benefit of always being in alignment. */
+           The table itself is the one shared grid (every cell div is a
+           direct child, no per-row wrapper) so column tracks are computed
+           ONCE, from the widest content across every row combined, and
+           every row's cells snap to those exact shared boundaries --
+           independent per-row grids would each size columns from their
+           own content only, drifting out of alignment with each other.
+           Per-row background/border (header/total-row shading) is
+           therefore painted on each cell individually
+           (.ledger-cell-header / .ledger-total-row), since a shared grid
+           has no per-row box to paint. */
         .ledger-table, .forecast-data-table {{
             display: grid;
             background-color: {tokens.MOCKUP_COLOR_CARD_BACKGROUND};
@@ -428,8 +401,8 @@ def inject_theme() -> None:
             margin-right: 6px;
         }}
 
-        /* Errors: a calm caution banner instead of Streamlit's default red
-           st.error box (design.md 4, "never a red error box"). */
+        /* A calm caution banner instead of Streamlit's default red
+           st.error box. */
         .caution-banner {{
             background-color: {tokens.MOCKUP_COLOR_CAUTION_BG};
             border: 1px solid {tokens.MOCKUP_COLOR_CAUTION_BORDER};
@@ -440,21 +413,18 @@ def inject_theme() -> None:
             color: {tokens.MOCKUP_COLOR_CAUTION_TEXT};
         }}
 
-        /* Forecast: wide centered content column -- widened from the
-           mockup's original 900px (real feedback: the chart read as
-           cramped) to give the now-larger chart real room. */
+        /* Wide centered content column, to give the chart real room. */
         .centered-content {{
             max-width: 1240px;
             margin-left: auto;
             margin-right: auto;
         }}
 
-        /* Forecast summary cards -- same accent-left-border + hover-lift
-           treatment as the Overview metric cards (Section 1.5), reusing
-           the identical Confirmed/Projected tokens the chart itself uses
-           (design.md: no third, unrelated palette for this screen). These
-           wrap a plain st.container(border=True), not a stMetric, hence a
-           separate selector from [class*="metric-card-"] above. */
+        /* Same accent-left-border + hover-lift treatment as the Overview
+           metric cards, reusing the identical Confirmed/Projected tokens
+           the chart itself uses. These wrap a plain st.container(border=True),
+           not a stMetric, hence a separate selector from
+           [class*="metric-card-"] above. */
         [class*="st-key-forecast-card-"] {{
             background-color: {tokens.COLOR_BACKGROUND};
             border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
@@ -492,11 +462,10 @@ def inject_theme() -> None:
         }}
 
         /* A custom "Show data" expander replaces Vega-Embed's own default
-           "..." action menu (real feedback: unstyled, generic, out of
-           place next to the rest of this UI) -- hide vega-embed's chrome
-           entirely rather than leave two competing controls. Standard
-           vega-embed DOM: a <details class="vega-embed"><summary> toggle
-           opening a .vega-actions dropdown. */
+           action menu -- hide vega-embed's chrome entirely rather than
+           leave two competing controls. Standard vega-embed DOM: a
+           <details class="vega-embed"><summary> toggle opening a
+           .vega-actions dropdown. */
         .vega-embed summary {{ display: none !important; }}
         .vega-embed .vega-actions {{ display: none !important; }}
         </style>

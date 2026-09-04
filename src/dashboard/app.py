@@ -1,42 +1,23 @@
-"""Layer 7: Streamlit dashboard.
+"""Streamlit dashboard.
 
-Calls src/api/main.py (Layer 6) over HTTP via src/dashboard/api_client.py --
-this module never imports src.ledger, src.matching, or src.forecast
-directly (docs/plan.md's modular-monolith transport boundary: the dashboard
-reaches ledger/matching/forecast state only through the API layer, same as
-any other HTTP client would).
+Calls src/api/main.py over HTTP via src/dashboard/api_client.py -- this
+module never imports src.ledger, src.matching, or src.forecast directly
+(modular-monolith transport boundary: ledger/matching/forecast state is
+reached only through the API layer, same as any other HTTP client would).
 
-Layout (mockup-replication pass, "ZeroDrift Dashboard.dc.html", user-
-supplied): true gated single-view navigation -- st.session_state.view is
-one of "run"/"overview"/"exceptions"/"ledger"/"forecast", only the active
-view's content renders, the sidebar's Overview/Exceptions/Ledger/Forecast
-nav buttons stay disabled until a run is loaded, and a "View Overview ->"
-button on the Run screen's success banner is the only way in. This
-supersedes the prior "everything renders on one page" pass (see git history
-for that version's rationale) -- the user explicitly chose literal
-replication over the one-page compromise, with sign-off to rewrite the
-tests that assumed one-page rendering.
+Navigation is gated single-view: st.session_state.view is one of
+"run"/"overview"/"exceptions"/"ledger"/"forecast", only the active view's
+content renders, and the sidebar's nav buttons stay disabled until a run
+is loaded. Compare mode (2+ runs selected) is not a separate nav state --
+the active view still governs which section shows, rendered once per
+selected run in side-by-side st.columns.
 
-Compare mode (2+ runs selected via the run_selector multiselect) is NOT a
-separate nav state -- the active view still governs WHICH section shows,
-and it renders once per selected run in side-by-side st.columns, exactly
-as the one-page pass already did. Gating is about which section; multi-run
-side-by-side stays governed purely by how many runs are selected.
-
-Known, deliberately-scoped gaps (flagged, not silently shipped):
-- The Exceptions table has no Amount column. ExceptionRecord (src/api/main.py)
-  doesn't carry a settlement/bank-credit amount today -- adding one is a
-  small, real backend field, same shape as the candidate_order_id addendum,
-  but wasn't itself pre-approved in this pass either, so it's omitted.
-- The Forecast chart's projected bars are distinguished from confirmed ones
-  by color + reduced opacity + a dashed stroke outline (Altair/Vega-Lite),
-  not the mockup's literal 45-degree hatch fill -- Vega-Lite has no built-in
-  repeating-pattern fill without a custom SVG pattern def, judged not worth
-  the fragility for a demo chart. The mockup's small whisker/error-bar tick
-  above each projected bar is also not implemented (getting a rule mark
-  aligned to an xOffset-grouped bar's exact position reliably was judged
-  more fragile than valuable here) -- the +/-5% band stays a caption note
-  only, same as the prior pass.
+Known, deliberately-scoped gaps:
+- The Exceptions table has no Amount column -- ExceptionRecord
+  (src/api/main.py) doesn't carry a settlement/bank-credit amount today.
+- The Forecast chart's projected bars are distinguished by color + reduced
+  opacity + a dashed stroke outline, not a literal hatch fill -- Vega-Lite
+  has no built-in repeating-pattern fill without a custom SVG pattern def.
 """
 from __future__ import annotations
 
@@ -85,19 +66,13 @@ def _load_forecast(batch_run_id: str, as_of: date, horizon_days: int = 7) -> lis
 
 
 def _caution_banner(message: str) -> None:
-    """A calm caution-toned inline banner (never Streamlit's default red
-    st.error box) for error paths NOT covered by an existing at.error()-based
-    test assertion. test_dashboard_manual_batch_run_id_unknown_shows_error_not_crash
-    asserts on at.error directly, so that ONE call site -- the "Unknown
-    batch_run_id" path below -- deliberately stays a native st.error()
-    instead of this banner; every other error path uses it."""
+    """A calm caution-toned banner, never Streamlit's default red st.error --
+    except the "Unknown batch_run_id" path below, which deliberately stays a
+    native st.error() because a test asserts on it directly."""
     st.markdown(f'<div class="caution-banner">{message}</div>', unsafe_allow_html=True)
 
 
 def _time_ago(moment: datetime) -> str:
-    """Real elapsed wall-clock time since `moment`, never a placeholder --
-    the run badge shows this, and CLAUDE.md forbids fabricating a figure
-    like "2 min ago" that wasn't actually measured."""
     seconds = int((datetime.now() - moment).total_seconds())
     if seconds < 60:
         return "just now"
@@ -205,10 +180,9 @@ def _render_ledger(batch_run_id: str) -> None:
     )
     trial_balance_rows = _load_trial_balance(batch_run_id)
 
-    # One shared grid for the whole table (see theme.py's .ledger-table comment) --
-    # every cell below is a direct child, never wrapped in a per-row div, so
-    # column widths are computed once, across every row together, and every
-    # row's cells land on identical boundaries.
+    # One shared grid for the whole table (see theme.py's .ledger-table
+    # comment) -- every cell is a direct child, never a per-row div, so
+    # columns align across all rows.
     cells_html = ['<div class="ledger-table">']
     for i, label in enumerate(("Code", "Account", "Type", "Debit", "Credit", "Net")):
         right = " ledger-cell-right" if i >= 3 else ""
@@ -337,12 +311,10 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
                 range=[tokens.ACTIVE_COLOR_SUCCESS, tokens.ACTIVE_COLOR_INFO],
             ),
             legend=alt.Legend(
-                # Inset in the plot's own bottom-right corner (real feedback:
-                # orient="top" sat right against the card edge) -- the bars are
-                # tallest at the left/early dates and taper off, so this corner
-                # stays clear of the data in practice. fillColor+padding give the
-                # inset its own small card so it reads as a control, not a label
-                # floating over the bars.
+                # Inset bottom-right: bars taper off toward later dates, so
+                # this corner stays clear of the data. fillColor+padding give
+                # it its own small card so it reads as a control, not a
+                # floating label.
                 title=None,
                 orient="bottom-right",
                 symbolType="square",
@@ -411,9 +383,9 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
         )
         st.altair_chart(bars, use_container_width=True)
 
-        # Replaces Vega-Embed's own default action menu (hidden via theme.py's
-        # .vega-embed summary rule) with a control that matches the rest of the
-        # app, opening the same grid-table component the Ledger view uses.
+        # Replaces Vega-Embed's default action menu (hidden via theme.py's
+        # .vega-embed rule) with the same grid-table component the Ledger
+        # view uses.
         with st.expander("Show data"):
             table_html = ['<div class="forecast-data-table">']
             for label in ("Date", "Confirmed", "Projected"):
@@ -533,17 +505,12 @@ if view == "run":
             )
             trigger_as_of = None
             if gate_stage_2:
-                # NOT min_value=date.today() -- confirmed 2026-09-04: this cutoff
-                # selects a point within the frozen dataset's own historical date
-                # range (2025-01-06 to 2025-02-04), which is in the past relative
-                # to the real calendar. A `min_value=date.today()` restriction
-                # (briefly present here) silently clamped every real cutoff date
-                # to today, which is after the whole dataset -- gating nothing at
-                # all (real regression: test_dashboard_trigger_with_cutoff_checkbox_
-                # produces_real_projected_forecast and
-                # test_dashboard_cutoff_caption_shown_when_cutoff_applied both
-                # caught this). 2025-01-20 matches the verified demo cutoff
-                # (docs/plan.md Layer 10).
+                # NOT min_value=date.today(): this cutoff selects a point
+                # within the frozen dataset's own historical date range
+                # (2025-01-06 to 2025-02-04), in the past relative to the
+                # real calendar. A min_value=date.today() restriction would
+                # silently clamp every real cutoff to today -- after the
+                # whole dataset, gating nothing at all.
                 trigger_as_of = st.date_input(
                     "Settlement cutoff (as_of)", value=date(2025, 1, 20), key="trigger_as_of"
                 )
@@ -595,11 +562,10 @@ if view == "run":
                     st.success("Added batch run successfully!")
                     st.code(manual_id, language=None)
                 except api_client.ApiClientError as exc:
-                    # exc.detail is already the API's own "unknown batch_run_id: <id>"
-                    # text (src/api/main.py::_require_known_run) -- prefixing "Unknown
-                    # batch_run_id:" again duplicated the phrase (real user-visible bug,
-                    # 2026-09-04: "Unknown batch_run_id: unknown batch_run_id: <id>").
-                    # Use the id the user actually typed instead of re-showing exc.detail.
+                    # exc.detail is already "unknown batch_run_id: <id>"
+                    # (src/api/main.py::_require_known_run) -- prefixing
+                    # "Unknown batch_run_id:" again would duplicate the
+                    # phrase, so use the id the user typed instead.
                     st.error(f"Unknown batch_run_id: {manual_id}")
 
     if not st.session_state.runs:
@@ -613,16 +579,11 @@ if view == "run":
             )
             if st.button("View Overview ->", key="goto_overview_button"):
                 st.session_state.view = "overview"
-                # `view` (below) is read once, before this block, so without
-                # an immediate rerun this click would set the session-state
-                # value but still render the Run screen on this same pass --
-                # a real, silent navigation bug, not just a test artifact.
-                # This is exactly the case the module's own rerun-avoidance
-                # guidance carves out an exception for: forcing the
-                # already-decided transition to actually show up now,
-                # instead of the sidebar nav buttons' style of navigation
-                # (whose click happens earlier in the script than the
-                # `view` read, so no rerun is needed there).
+                # `view` is read once, above this block, so without an
+                # immediate rerun this click would set the session-state
+                # value but still render the Run screen on this same pass.
+                # Sidebar nav buttons don't need this: their click happens
+                # earlier in the script than the `view` read.
                 st.rerun()
 
 else:
