@@ -124,9 +124,55 @@ Notably, **even the frozen dataset's own size does not fit a fresh day's budget 
 
 A batch that won't fit today's remaining budget fails cleanly with a clear message before any row is posted (`src/orchestration/batch_runner.py`'s pre-flight check) rather than posting partial results — see the RCA below for the full incident.
 
-## RCA: the Groq daily-token-cap crash (2026-09-03)
+## RCA: real incidents from this build
 
-This is a real incident from Layer 4 testing, not an invented one for the sake of having an RCA — both fixes below are real commits, each covered by real tests.
+Five real incidents, in build order, each tied to a real commit (or, for the one that never touched code, independently reproduced live before writing a single number here) — never invented for the sake of having war stories. CLAUDE.md's integrity rule leaves no other option: nothing below is written unless it was actually run.
+
+### 1. The Layer 4 marathon: five real bugs and two burned API keys (2026-08-31)
+
+**What broke.** Getting the diagnostic agent live-tested against all 37 agent-graded records in the frozen dataset surfaced five distinct, real bugs — each found by an actual live failure, not reasoned out in advance:
+
+1. **Tool-binding/pseudo-tool bug.** Describing the final-answer JSON schema in the same turn as bound tools made `openai/gpt-oss-120b` sometimes wrap a premature answer as a call to a synthetic `"json"` tool absent from the bound tool list, which Groq's API then rejected with a 400 — and once let through, this let an `adversarial_trap` force-match. Fixed by splitting `FINAL_ANSWER_INSTRUCTION` out of `SYSTEM_PROMPT`, shown only after tools are no longer bound.
+2. **Candidate-discovery bug.** Candidate orders were matched against order gross amount/timestamp instead of settlement net amount/settlement date — the generator jitters `adversarial_trap` decoys around the twin order's *settlement*, not the order itself, so real candidates were never found. Fixed in `discrepancy.py::find_candidate_orders`.
+3. **AMEX_SURCHARGE vs INTL_MARKUP priority (`ORD1069`).** `get_tax_rules`' `expected_mdr_paise` is the domestic standard rate regardless of internationality, so an international transaction always shows an "overage" against it even when nothing is wrong beyond the markup itself. The model was deciding from MDR magnitude alone instead of the `is_international` field already in hand. Fixed with an explicit precedence rule in `SYSTEM_PROMPT` — verified live on a fresh key: both `ORD1069` and `ORD1080` then got the right `root_cause_code`.
+4. **`quantified_delta_paise` sign/composition bug.** Never specified, so the model reported signed actual-minus-expected deltas (`ORD1080`: `-346` instead of `346`) and, separately, summed a fee delta with its own downstream GST-on-MDR consequence into one figure (`ORD1069`: `5268` instead of `4464` — GST-on-MDR moves with MDR automatically, it isn't a second independent deviation). Fixed with an explicit non-negative-magnitude, MDR-only rule.
+5. **CUTOFF_T1/CUTOFF_T2 semantics (`ORD1067`).** Never defined anywhere in the prompt. The model computed the right facts (expected vs. actual business-day gap) and reasoned correctly about them, then keyed the code to the *actual observed* gap instead of the rail's own *standard* window. Fixed with an explicit definition tied to `expected_window_business_days`.
+
+**The process failure underneath all five.** `AGENT_LOGIC_VERSION`'s cache-invalidation is deliberately coarse — any prompt/tool change invalidates and re-diagnoses the *entire* affected category, not just the one record that motivated the fix. Iterating fix → re-run-the-category → still wrong → fix again, category re-runs at a time, burned through more than one Groq API key's full daily quota in a single session chasing what were ultimately single-record bugs.
+
+**The fix that actually mattered:** `scripts/diagnose_one.py` — added mid-session specifically so one record could be checked live in isolation before ever spending a full-category re-run to check for regressions.
+
+Real: `git show f6d0f49`. Covered by `tests/test_agent.py`.
+
+### 2. The gatekeeper trusted the witness's own testimony instead of the court record (2026-08-31, same night)
+
+**What broke.** The entire safety boundary between "the model said something" and "that gets posted to a real ledger" had a hole in it. `gatekeeper_check` decided whether to trust a non-`UNRESOLVED` resolution by checking `resolution.evidence_tool_calls` — a field the model fills in **itself**, inside its own final JSON answer — instead of `state["tool_call_history"]`, the graph's own independently-tracked, authoritative record of what tools actually got called. A model could self-report evidence for a tool it never called, and the old check — which only tested whether the list was non-empty — would accept it as postable.
+
+**How it was found.** Not a crash — a fresh-context code review of `graph.py`, explicitly asked to distrust every claim the implementation made.
+
+**The fix.** Compare `resolution.evidence_tool_calls` against `state["tool_call_history"]` directly, and reject unless the claimed tools are a real subset of what was actually invoked. `AGENT_LOGIC_VERSION` bumped 5 → 6.
+
+**Verification, done the cheap way first.** Before spending a single live call, all 37 already-cached `debug_info["tool_call_history"]` entries were replayed through the new gatekeeper logic offline: **0 of 37 flipped status** — the fix was behavior-preserving on everything already verified, proven at zero cost. Only then was one live canary run made to sanity-check the accept-path still worked end to end; a further 15 records (`fee_drift` 7, `missing_tax_line` 5, `refund_clawback` 3) were live-reverified under v6, matching their pre-fix (v5) root causes and deltas exactly. Today's cumulative spend was reported honestly as a genuine mix, not one blended figure: real (`refund_clawback`, 30,348 tokens, measured from Groq's own `usage_metadata`) and estimated (`fee_drift`/`missing_tax_line`, ~128,700 tokens, from before that instrumentation existed).
+
+**The lasting fix beyond the bug itself.** `graph.py`'s `AGENT_LOGIC_VERSION` docstring now states a standing rule: for any pure post-processing change (gatekeeper logic, JSON parsing, retry/backoff — nothing that touches `SYSTEM_PROMPT`, a tool, or the model), replay the cache first; only fall through to a live run if that can't settle it.
+
+Real: `git show 00c745c`. Covered by `tests/test_agent.py::test_gatekeeper_rejects_evidence_not_backed_by_real_tool_history`.
+
+### 3. A refund that was correctly diagnosed for months without ever posting (2026-09-01)
+
+**What broke.** `refund_clawback` — a ground-truth category the agent had already been verified to diagnose correctly, as `REFUND_NO_MDR_REVERSAL` — had no ledger posting path at all. The fast path correctly excluded these orders; the agent correctly diagnosed them; nothing connected the diagnosis to an actual journal entry. `src/ledger/journal.py` simply had no function for it, and no test had ever exercised posting one of the 3 real `refund_clawback` orders against Postgres.
+
+**How it was found.** Not a crash — a design question while building Layer 5's cash forecaster: *"could a refund double-count in the projected-cash total?"* Answering it meant grepping for the refund-reversal posting function the plan specified. It didn't exist.
+
+**The reasoning that answered the actual question asked.** No double-counting risk, for a non-obvious reason: the settlement leg (`net_amount`) is computed on the original gross regardless of refund status, so it hits `CASH` identically to any normal order — the missing entry only ever touches `REVENUE_GROSS`/`AR_GATEWAY_CLEARING`, never `CASH`. The forecaster's cash figures were accidentally safe. The gap itself was still real.
+
+**A subtler thing found in the same pass.** The plan's own specified refund-reversal entry — Debit `REVENUE_GROSS`, Credit `AR_GATEWAY_CLEARING` — pushes `AR_GATEWAY_CLEARING` negative for that order, since Stage 2 had already cleared it to zero. Documented as the intended mechanism, not "fixed" away: the negative residual is the balancing entry for cash the merchant already received but owes back to the customer, deliberately not modeled as a further `CASH` movement.
+
+**Verified with real before/after numbers, not just a green test.** The 3 real `refund_clawback` orders in the frozen dataset (`ORD1085`, `ORD1086`, `ORD1087`) carry a combined gross of **₹6,161.99** and a combined refund of **₹2,608.40** — both recomputed directly from `data/challenge_batch_100/` for this README, not copied from the commit message. Before the fix: `REVENUE_GROSS`/`AR_GATEWAY_CLEARING` correctly net zero across the batch (the gap was invisible precisely because nothing was posted). After: the same two accounts correctly reflect the ₹2,608.40 refund, `MDR_EXPENSE` completely untouched (₹116.71 combined MDR on these 3 orders, never reversed), grand total still zero both times.
+
+Real: `git show ab6feed`. Covered by `tests/test_ledger.py` (tests 18–21, e.g. `test_refund_reversal_never_touches_mdr_expense`, `test_refund_reversal_posted_for_all_frozen_refund_clawback_orders_trial_balance_still_balances`).
+
+### 4. The Groq daily-token-cap crash (2026-09-03)
 
 **What broke.** Triggering a live (non-frozen) seed batch of any size other than the exact frozen recipe (`seed=42, records=100`) came back from the API as a bare "Internal Server Error." Tracing it down: an uncaught `groq.RateLimitError: 429 - tokens per day (TPD), Limit 200000, Used 198791` from the underlying Groq client, propagating uncaught through `run_batch` all the way to FastAPI's generic 500 handler — the real reason was completely hidden from whoever hit it.
 
@@ -138,7 +184,21 @@ This is a real incident from Layer 4 testing, not an invented one for the sake o
 - **`fc1d159`** — *Add a local daily-token-budget guard for the Groq agent path.* Distinguishes a daily (TPD) 429 from a per-minute (TPM) one and fails fast instead of retrying; adds `_DailyTokenTracker` (`src/agent/rate_limiter.py`, real Groq `usage_metadata` only, never an estimate) with a fail-fast `check_budget()` at the top of `diagnose_discrepancy`; `src/api/main.py` now catches the resulting `AgentRateLimitedError` and returns a clean 503 with the real reason, instead of a bare 500.
 - **`e7ace91`** — *Pre-flight batch-level budget check: fail before any posting, not mid-batch.* The per-record check from the first fix still let a seed batch die partway through, with earlier records already posted — the frozen dataset has `diagnose_or_replay`'s cache as a safety net for this, but a genuinely unseen seed batch has nothing to fall back on once a live call is needed. Fixed in `src/orchestration/batch_runner.py` by estimating the whole batch's live-call cost — using the real measured average tokens/record, never a hardcoded guess — *before* Stage 1 capture even starts, and raising `AgentRateLimitedError` immediately if it won't fit. Zero rows written, not a partial batch.
 
-Both commits are real (`git show fc1d159`, `git show e7ace91`) and both are covered by real tests (`tests/test_rate_limiter.py`, `tests/test_agent.py`, `tests/test_api.py`). The resulting guardrail is what `RECOMMENDED_MAX_LIVE_SEED_RECORDS` (60 records, above) is built on.
+Real: `git show fc1d159`, `git show e7ace91`. Covered by `tests/test_rate_limiter.py`, `tests/test_agent.py`, `tests/test_api.py`.
+
+### 5. The stress test that correctly refused to run (2026-09-03/04)
+
+**What was tried.** Wanting to prove the system could handle "any seed, not just the frozen batch," a 1000-record live seed was generated (`seed=999`). The generator doesn't produce exactly 1000 order records at that scale — it produced **780** — of which **370** (240 settlement discrepancies + 130 unmatched bank lines) needed live agent diagnosis.
+
+**The real math.** 370 records × the real measured average of **~6,883 tokens/record** ≈ **2,546,774 tokens** needed for the agent-diagnosis phase alone, against a 200,000/day budget — about **12.7x** over, meaning roughly **13 days** to clear even spread across consecutive fresh-budget days.
+
+**What happened instead of a mid-batch crash.** `run_batch`'s pre-flight check (incident 4's `e7ace91` fix) fired immediately and refused the batch with the exact numbers above, before a single row posted — re-verified for this README: **0 `journal_entries` rows, 0 `reconciliation_matches` rows** written.
+
+**The follow-up question that mattered, and its honest answer.** Would a multi-agent architecture fix this? No — the constraint is a fixed daily token *ceiling*, not a reasoning-quality problem. More agents means more total calls, not fewer tokens; multi-agent architectures solve task-specialization problems, and this was a budget problem. Reaching for a fancier architecture would have made the math worse, not better.
+
+**The actual fix:** not a new architecture — a documented, honestly-measured scope boundary. This stress test is what motivated actually measuring the real per-record cost (rather than guessing), which is what `RECOMMENDED_MAX_LIVE_SEED_RECORDS = 60` (`src/agent/rate_limiter.py`, above) is built on.
+
+Real: independently reproduced for this README — `generate_batch(num_records=1000, seed=999)` → 780 orders, 370 discrepancy records; `run_batch(...)` against a real Postgres session raises `AgentRateLimitedError` with the exact figures above and posts zero rows. No commit exists for this one (nothing about it needed a code change — the pre-flight check it exercised was already built for incident 4), so the numbers here were produced by actually running the code for this README, not recalled from memory (CLAUDE.md Sec.1).
 
 ## A couple of things worth knowing before you dig in
 

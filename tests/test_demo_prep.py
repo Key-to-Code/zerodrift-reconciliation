@@ -243,6 +243,115 @@ def test_readme_rca_cross_checked_against_real_git_history():
 
 
 # ---------------------------------------------------------------------------
+# Test 4b-4e: the four additional real incidents added to the RCA section
+# (2026-09-04, at the user's request), each cross-checked against real git
+# history or, for the one with no commit, reproduced fresh right here.
+# ---------------------------------------------------------------------------
+
+def test_readme_layer4_marathon_incident_cross_checked_against_git_history():
+    commit = "f6d0f49"
+    assert _git_commit_touches_file(commit, "src/agent/graph.py")
+    assert _git_commit_touches_file(commit, "scripts/diagnose_one.py")
+
+    text = _readme_text()
+    assert commit in text
+    assert "ORD1069" in text, "the concrete AMEX/INTL priority example must be named, not described vaguely"
+
+
+def test_readme_gatekeeper_incident_cross_checked_against_git_history():
+    commit = "00c745c"
+    assert _git_commit_touches_file(commit, "src/agent/graph.py")
+    subject = _git_commit_subject(commit)
+    assert "gatekeeper" in subject.lower()
+
+    text = _readme_text()
+    assert commit in text
+    assert "37" in text and "0 of 37" in text, "the offline-replay-found-zero-flips claim must state the real count"
+
+
+def test_readme_refund_clawback_incident_cross_checked_against_git_history(frozen_orders, frozen_settlements):
+    commit = "ab6feed"
+    assert _git_commit_touches_file(commit, "src/ledger/journal.py")
+
+    settlements_by_id = {s.order_id: s for s in frozen_settlements}
+    refund_orders = [o for o in frozen_orders if o.refund_amount is not None]
+    assert len(refund_orders) == 3
+    gross_total = sum((settlements_by_id[o.order_id].gross_amount for o in refund_orders), start=__import__("decimal").Decimal("0"))
+    refund_total = sum((o.refund_amount for o in refund_orders), start=__import__("decimal").Decimal("0"))
+    mdr_total = sum((settlements_by_id[o.order_id].mdr for o in refund_orders), start=__import__("decimal").Decimal("0"))
+
+    text = _readme_text()
+    assert commit in text
+    assert f"{gross_total:,.2f}" in text or str(gross_total) in text, (
+        f"README must state the real combined gross ({gross_total}), freshly recomputed from the frozen dataset"
+    )
+    assert f"{refund_total:,.2f}" in text or str(refund_total) in text
+    assert f"{mdr_total:,.2f}" in text or str(mdr_total) in text
+
+
+def test_readme_stress_test_incident_numbers_match_a_fresh_run():
+    """No commit exists for this one -- it never needed a code change. So
+    instead of cross-checking against git, this test reproduces the whole
+    thing live, right now, and asserts README's numbers match a fresh run
+    -- exactly the standard CLAUDE.md Sec.1 sets for every other number in
+    this project."""
+    import math
+    import uuid
+
+    from sqlalchemy import create_engine, func, select
+
+    from src.agent.graph import AGENT_LOGIC_VERSION
+    from src.agent.discrepancy import build_settlement_discrepancy_queue, build_unmatched_bank_line_queue
+    from src.agent.rate_limiter import AgentRateLimitedError, DAILY_TOKEN_BUDGET, daily_token_tracker
+    from src.agent.run_log import average_real_tokens_per_live_call, count_live_calls_needed
+    from src.data.generator import generate_batch
+    from src.ledger.models import JournalEntry, ReconciliationMatch, get_sessionmaker, reset_schema
+    from src.matching.schema import bank_lines_to_frame, orders_to_frame, settlements_to_frame
+    from src.orchestration.batch_runner import DEFAULT_AGENT_CACHE_PATH, run_batch
+
+    batch = generate_batch(num_records=1000, seed=999)
+    assert len(batch.orders) == 780
+
+    orders_df = orders_to_frame(batch.orders)
+    settlements_df = settlements_to_frame(batch.settlements)
+    bank_df = bank_lines_to_frame(batch.bank_lines)
+    settlement_records = build_settlement_discrepancy_queue(orders_df, settlements_df, bank_df)
+    unmatched_records = build_unmatched_bank_line_queue(orders_df, settlements_df, bank_df)
+    all_records = settlement_records + unmatched_records
+    assert len(all_records) == 370
+
+    avg_tokens = average_real_tokens_per_live_call([DEFAULT_AGENT_CACHE_PATH])
+    n_live = count_live_calls_needed(all_records, DEFAULT_AGENT_CACHE_PATH, AGENT_LOGIC_VERSION)
+    assert n_live == 370
+    estimated_tokens = math.ceil(n_live * avg_tokens)
+    assert estimated_tokens == 2_546_774
+
+    engine = create_engine(
+        "postgresql+psycopg://postgres:postgres@localhost:5433/finance_controller_test", future=True
+    )
+    reset_schema(engine)
+    session = get_sessionmaker(engine)()
+    daily_token_tracker.reset_for_testing()
+    try:
+        with pytest.raises(AgentRateLimitedError):
+            run_batch(session, uuid.uuid4(), batch.orders, batch.settlements, batch.bank_lines)
+        n_entries = session.execute(select(func.count()).select_from(JournalEntry)).scalar_one()
+        n_matches = session.execute(select(func.count()).select_from(ReconciliationMatch)).scalar_one()
+        assert n_entries == 0
+        assert n_matches == 0
+    finally:
+        session.close()
+        daily_token_tracker.reset_for_testing()
+
+    text = _readme_text()
+    assert "780" in text and "370" in text
+    assert "2,546,774" in text or "2546774" in text
+    assert "6,883" in text or "6883" in text
+    assert estimated_tokens / DAILY_TOKEN_BUDGET > 12 and estimated_tokens / DAILY_TOKEN_BUDGET < 13
+    assert "13" in text, "the real ceil(days-to-clear) figure must be stated"
+
+
+# ---------------------------------------------------------------------------
 # Test 5: final read-through -- no forbidden architecture language anywhere
 # in README.md, design.md, or src/**/*.py (criterion 5)
 # ---------------------------------------------------------------------------
