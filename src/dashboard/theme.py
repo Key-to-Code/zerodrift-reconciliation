@@ -395,14 +395,22 @@ def inject_theme() -> None:
             border-radius: {tokens.RADIUS_MEDIUM}px;
             overflow: hidden;
             font-size: 0.92rem;
+            /* Real reported bug: Code and Account text read as overlapping --
+               each cell's own left/right padding is real space, but a 19-20
+               char account_code (CASH_IN_TRANSIT_UTR, SUSPENSE_UNRESOLVED) in
+               a monospace font at 1.3fr left too little room, forcing a wrap
+               tight enough against the neighboring column to read as crowding.
+               column-gap adds a real, guaranteed gutter on top of cell padding
+               -- belt and suspenders, not relying on padding alone. */
+            column-gap: 20px;
         }}
-        .ledger-table {{ grid-template-columns: 1.3fr 2.6fr 0.9fr 1.15fr 1.15fr 1.15fr; }}
-        .forecast-data-table {{ grid-template-columns: 1fr 1.3fr 1.3fr; }}
+        .ledger-table {{ grid-template-columns: 1.6fr 2.6fr 0.7fr 1.1fr 1.1fr 1.1fr; }}
+        .forecast-data-table {{ grid-template-columns: 1fr 1.3fr 1.3fr; margin-top: 14px; }}
         .ledger-cell {{
             display: flex;
             align-items: center;
             min-width: 0;
-            padding: 16px 22px;
+            padding: 16px 18px;
             border-bottom: 1px solid {tokens.MOCKUP_COLOR_BORDER_SUBTLE};
             color: {tokens.MOCKUP_COLOR_TEXT_DARK};
         }}

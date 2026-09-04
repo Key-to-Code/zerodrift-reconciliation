@@ -337,15 +337,23 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
                 range=[tokens.ACTIVE_COLOR_SUCCESS, tokens.ACTIVE_COLOR_INFO],
             ),
             legend=alt.Legend(
+                # Inset in the plot's own bottom-right corner (real feedback:
+                # orient="top" sat right against the card edge) -- the bars are
+                # tallest at the left/early dates and taper off, so this corner
+                # stays clear of the data in practice. fillColor+padding give the
+                # inset its own small card so it reads as a control, not a label
+                # floating over the bars.
                 title=None,
-                orient="top",
-                direction="horizontal",
+                orient="bottom-right",
                 symbolType="square",
                 symbolSize=90,
                 labelFontSize=12,
                 labelColor=tokens.MOCKUP_COLOR_TEXT_MUTED,
-                padding=0,
-                offset=8,
+                fillColor=tokens.MOCKUP_COLOR_CARD_BACKGROUND,
+                strokeColor=tokens.MOCKUP_COLOR_BORDER,
+                cornerRadius=6,
+                padding=10,
+                offset=12,
             ),
         )
         shared_encodings = dict(
