@@ -126,7 +126,7 @@ A batch that won't fit today's remaining budget fails cleanly with a clear messa
 
 ## RCA: real incidents from this build
 
-Five real incidents, in build order, each tied to a real commit (or, for the one that never touched code, independently reproduced live before writing a single number here) — never invented for the sake of having war stories. CLAUDE.md's integrity rule leaves no other option: nothing below is written unless it was actually run.
+Six real incidents, in build order, each tied to a real commit (or, for the one that never touched code, independently reproduced live before writing a single number here) — never invented for the sake of having war stories. CLAUDE.md's integrity rule leaves no other option: nothing below is written unless it was actually run.
 
 ### 1. The Layer 4 marathon: five real bugs and two burned API keys (2026-08-31)
 
@@ -199,6 +199,20 @@ Real: `git show fc1d159`, `git show e7ace91`. Covered by `tests/test_rate_limite
 **The actual fix:** not a new architecture — a documented, honestly-measured scope boundary. This stress test is what motivated actually measuring the real per-record cost (rather than guessing), which is what `RECOMMENDED_MAX_LIVE_SEED_RECORDS = 60` (`src/agent/rate_limiter.py`, above) is built on.
 
 Real: independently reproduced for this README — `generate_batch(num_records=1000, seed=999)` → 780 orders, 370 discrepancy records; `run_batch(...)` against a real Postgres session raises `AgentRateLimitedError` with the exact figures above and posts zero rows. No commit exists for this one (nothing about it needed a code change — the pre-flight check it exercised was already built for incident 4), so the numbers here were produced by actually running the code for this README, not recalled from memory (CLAUDE.md Sec.1).
+
+### 6. The run that existed in Postgres but not to the API asking about it (2026-09-04)
+
+**What broke.** A batch would trigger successfully, its ledger rows would land in Postgres exactly as they should — and then asking for that same `batch_run_id`'s status, exceptions, or forecast came back `404 unknown batch_run_id`, even though `journal_entries`/`reconciliation_matches` for it were sitting right there in the database the whole time. The dashboard made it worse, not better: it kept showing a stale "Run ... loaded successfully" from browser session state, while every real data fetch underneath it was 404ing against a process that had no idea the run existed.
+
+**Root cause.** `batch_run_id -> recipe (source/seed/records)` lived in `_BATCH_RUN_REGISTRY`, a plain in-process Python dict in `src/api/main.py`. That dict is lost on every API process restart — including `uvicorn --reload` firing on an ordinary source-file save, which is the project's own documented dev workflow. The ledger data was never at risk (Postgres doesn't forget), but the *only* thing that let the API answer "does this `batch_run_id` exist" forgot it on every reload.
+
+**The fix.** A new `batch_run_recipes` table (`src/ledger/models.py::BatchRunRecipe`) persists the recipe in the same Postgres instance everything else already lives in — no new infrastructure, consistent with the modular-monolith framing (CLAUDE.md Sec.2). `_require_known_run` now reads this table instead of the dict; `trigger_batch_run` writes to it instead. Added independently of `ensure_schema_exists`'s own "is the rest of the schema already there" check (`ensure_batch_run_recipes_table_exists`, `CREATE TABLE IF NOT EXISTS`), so it backfills onto an already-schema'd database instead of silently never appearing there — applied to the real dev database as part of the fix, not just future ones.
+
+**Verified both directions, not just the happy path.** `test_status_endpoint_depends_only_on_the_persisted_recipe_row_not_any_process_state` reproduces the real incident's exact shape: delete the recipe row for already-real ledger data → the status endpoint correctly 404s (proving there's no hidden in-memory fallback quietly covering for it); re-insert only that row, with zero re-triggering and zero re-posting → the same, already-real data becomes reachable again. That's what proves the fix is a genuine Postgres-backed lookup, not something scoped to the request that happened to trigger the run.
+
+**The honest limit of the fix.** Two specific runs triggered before this landed had never had their recipe persisted anywhere, and can't be recovered this way — their ledger data is still valid and directly queryable via SQL, but the dashboard can't reach them again without a fresh trigger. Every run triggered from this fix onward survives a restart; the two from before it don't, and that's disclosed rather than quietly forgotten.
+
+Real: `git show 663ddf2`. Covered by `tests/test_api.py::test_triggered_run_recipe_persists_to_postgres`, `test_status_endpoint_depends_only_on_the_persisted_recipe_row_not_any_process_state`; `tests/test_ledger.py::test_ensure_schema_exists_also_creates_batch_run_recipes_on_a_fresh_database`, `test_ensure_batch_run_recipes_table_exists_backfills_it_on_an_already_schema_d_database`.
 
 ## A couple of things worth knowing before you dig in
 

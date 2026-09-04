@@ -351,6 +351,79 @@ def test_readme_stress_test_incident_numbers_match_a_fresh_run():
     assert "13" in text, "the real ceil(days-to-clear) figure must be stated"
 
 
+def test_readme_batch_run_persistence_incident_cross_checked_against_git_history():
+    commit = "663ddf2"
+    assert _git_commit_touches_file(commit, "src/ledger/models.py")
+    assert _git_commit_touches_file(commit, "src/api/main.py")
+    subject = _git_commit_subject(commit)
+    assert "persist" in subject.lower() and "batch_run" in subject.lower()
+
+    text = _readme_text()
+    assert commit in text
+    assert "batch_run_recipes" in text
+    assert "404" in text, "the real symptom (a 404 on an existing run) must be named"
+
+
+def test_batch_run_recipe_table_actually_backs_the_status_endpoint(pg_engine):
+    """Independent re-proof of the incident 6 claim, not just a citation:
+    delete the persisted recipe row for real ledger data and confirm the
+    status lookup genuinely depends on it (no leftover in-memory
+    fallback), then confirm re-inserting the row alone recovers it. Same
+    dependency-override pattern as tests/test_api.py's own `client`
+    fixture -- mirrors
+    test_status_endpoint_depends_only_on_the_persisted_recipe_row_not_any_process_state,
+    re-run here rather than merely cited."""
+    import uuid as uuid_module
+
+    from fastapi.testclient import TestClient
+
+    from src.api.main import app, get_session
+    from src.ledger.models import BatchRunRecipe, get_sessionmaker
+
+    session_factory = get_sessionmaker(pg_engine)
+
+    def _override_get_session():
+        session = session_factory()
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
+
+    app.dependency_overrides[get_session] = _override_get_session
+    try:
+        with TestClient(app) as client:
+            resp = client.post("/batch-runs", json={"source": "frozen"})
+            assert resp.status_code == 200
+            batch_run_id = resp.json()["batch_run_id"]
+            assert client.get(f"/batch-runs/{batch_run_id}/status").status_code == 200
+
+            session = session_factory()
+            row = session.get(BatchRunRecipe, uuid_module.UUID(batch_run_id))
+            session.delete(row)
+            session.commit()
+            session.close()
+
+            assert client.get(f"/batch-runs/{batch_run_id}/status").status_code == 404, (
+                "with the recipe row gone, this must 404 -- proves no hidden in-memory registry is covering for it"
+            )
+
+            session = session_factory()
+            session.add(
+                BatchRunRecipe(batch_run_id=uuid_module.UUID(batch_run_id), source="frozen", seed=None, records=100)
+            )
+            session.commit()
+            session.close()
+
+            resp = client.get(f"/batch-runs/{batch_run_id}/status")
+            assert resp.status_code == 200, (
+                "re-inserting the recipe row alone must recover access to the still-real ledger data"
+            )
+            assert resp.json()["total"] > 0
+    finally:
+        app.dependency_overrides.clear()
+
+
 # ---------------------------------------------------------------------------
 # Test 5: final read-through -- no forbidden architecture language anywhere
 # in README.md, design.md, or src/**/*.py (criterion 5)
