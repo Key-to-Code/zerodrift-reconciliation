@@ -43,7 +43,7 @@ from src.agent.discrepancy import (
     build_unmatched_bank_line_queue,
 )
 from src.agent.resolution import AgentResolution
-from src.agent.run_log import append_run_log, load_run_log
+from src.agent.run_log import append_run_log, load_run_log, record_key
 from src.common.money import from_paise, to_paise
 from src.data.generator import generate_batch
 from src.data.models import BankStatementLine, GatewaySettlement, GroundTruthEntry, InternalOrder
@@ -295,6 +295,31 @@ def run_agent_block_once(
     return resolutions
 
 
+def run_agent_block_resuming(
+    records: list[DiscrepancyRecord], diagnose_fn: DiagnoseFn, log_path: Path, logic_version: int
+) -> dict[str, AgentResolution]:
+    """Like run_agent_block_once, but skips any record already logged at
+    log_path -- resuming a single run interrupted by an external quota wall,
+    not reusing a DIFFERENT run's cache. Real occurrence, not hypothetical:
+    a live sweep hit AgentRateLimitedError (src/agent/rate_limiter.py) 22
+    records into a 37-record run, and the whole point of the per-record
+    daily-budget guard is to fail cleanly mid-sweep rather than crash --
+    without this, resuming meant either re-paying for the 22 already-logged
+    records (run_agent_block_once has no skip logic, by design, since a
+    *fresh* run must never silently replay another run's answer) or hand-
+    editing the discrepancy queue. This preserves run_agent_block_once's own
+    genuine-independence guarantee untouched -- it is not called here at
+    all, and NOTHING from a different run_index's log is ever read -- this
+    only avoids re-diagnosing what THIS SAME run already produced before
+    being interrupted."""
+    already_done = load_run_log(log_path)
+    remaining = [r for r in records if record_key(r) not in already_done]
+    for record in remaining:
+        resolution, debug_info = diagnose_fn(record)
+        append_run_log(log_path, record, resolution, debug_info, logic_version)
+    return resolutions_from_log(log_path)
+
+
 def resolutions_from_log(log_path: Path) -> dict[str, AgentResolution]:
     """Reconstructs a run's resolutions, keyed by gt_key_for_record, from a
     previously-written data/agent_runs/<seed>_<run_index>.jsonl log -- zero
@@ -459,11 +484,21 @@ def main() -> None:
 
     if args.run_index is not None:
         log_path = AGENT_RUNS_DIR / f"{seed_label}_{args.run_index}.jsonl"
-        resolutions = run_agent_block_once(records, diagnose_discrepancy, log_path, AGENT_LOGIC_VERSION)
+        already_logged = len(load_run_log(log_path))
+        expected_total = len({record_key(r) for r in records})
+        if already_logged:
+            print(
+                f"Resuming run {args.run_index}: {already_logged}/{expected_total} already logged at {log_path} "
+                f"(e.g. from an earlier AgentRateLimitedError) -- only diagnosing what's still missing."
+            )
+        resolutions = run_agent_block_resuming(records, diagnose_discrepancy, log_path, AGENT_LOGIC_VERSION)
         print()
-        print(f"Agent-block run {args.run_index} complete: {len(resolutions)} resolutions logged to {log_path}")
-        print("Run the remaining sweep(s) on other days with --run-index, then score all of them together "
-              f"via --replay data/agent_runs/{seed_label} --runs <n>.")
+        print(f"Agent-block run {args.run_index}: {len(resolutions)}/{expected_total} resolutions now logged to {log_path}")
+        if len(resolutions) < expected_total:
+            print("Still incomplete -- rerun the same --run-index later (on a fresh day's budget) to finish it.")
+        else:
+            print("Run the remaining sweep(s) on other days with --run-index, then score all of them together "
+                  f"via --replay data/agent_runs/{seed_label} --runs <n>.")
         return
 
     run_resolutions = []

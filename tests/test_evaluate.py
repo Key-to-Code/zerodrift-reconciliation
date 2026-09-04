@@ -33,6 +33,7 @@ from evaluate import (
     gt_key_for_record,
     resolutions_from_log,
     run_agent_block_once,
+    run_agent_block_resuming,
     run_deterministic_block,
     score_agent_runs,
 )
@@ -465,6 +466,86 @@ def test_agent_block_every_invocation_logged(tmp_path):
         entry = json.loads(line)
         assert entry["logic_version"] == 7
         assert "record" in entry and "resolution" in entry
+
+
+# ---------------------------------------------------------------------------
+# run_agent_block_resuming (added 2026-09-04): resumes a single run
+# interrupted by an external quota wall (AgentRateLimitedError) without
+# re-paying for records that run already diagnosed and logged. Real
+# occurrence: run 2 of the frozen dataset's 3-run sweep hit exactly this,
+# 22/37 records in.
+# ---------------------------------------------------------------------------
+
+def test_run_agent_block_resuming_skips_already_logged_records(tmp_path):
+    records = _tiny_records()
+    log_path = tmp_path / "resume_1.jsonl"
+
+    # Pre-populate the log as if a prior, interrupted attempt already
+    # diagnosed ORD_A -- the resume must not call the model for it again.
+    calls: list[str] = []
+
+    def _tracking_stub(record):
+        calls.append(gt_key_for_record(record))
+        answers = {
+            "ORD_A": _resolution("AMEX_SURCHARGE", 1000),
+            "ORD_B": _resolution("MISSING_GST", 200),
+            "UNMATCHED_BANK_UTR_C": _resolution("UNRESOLVED", 0),
+        }
+        return answers[gt_key_for_record(record)], {"hop_count": 1, "tokens_used": 10}
+
+    run_agent_block_once([records[0]], _tracking_stub, log_path, logic_version=1)  # simulates the prior partial run
+    calls.clear()  # only care about calls made during the resume itself
+
+    resolutions = run_agent_block_resuming(records, _tracking_stub, log_path, logic_version=1)
+
+    assert set(calls) == {"ORD_B", "UNMATCHED_BANK_UTR_C"}, "ORD_A was already logged and must not be re-diagnosed"
+    assert set(resolutions.keys()) == {"ORD_A", "ORD_B", "UNMATCHED_BANK_UTR_C"}, "the full set must still come back"
+
+
+def test_run_agent_block_resuming_makes_zero_calls_once_complete(tmp_path):
+    records = _tiny_records()
+    log_path = tmp_path / "resume_2.jsonl"
+    stub = _make_stub(
+        {
+            "ORD_A": _resolution("AMEX_SURCHARGE", 1000),
+            "ORD_B": _resolution("MISSING_GST", 200),
+            "UNMATCHED_BANK_UTR_C": _resolution("UNRESOLVED", 0),
+        }
+    )
+    run_agent_block_once(records, stub, log_path, logic_version=1)  # a fully completed prior run
+
+    def _fail_if_called(record):
+        raise AssertionError("a fully-logged run must make zero live calls on resume")
+
+    resolutions = run_agent_block_resuming(records, _fail_if_called, log_path, logic_version=1)
+    assert len(resolutions) == 3
+
+
+def test_run_agent_block_resuming_never_reads_a_different_run_indexs_log(tmp_path):
+    """The independence guarantee (run_agent_block_once's own docstring:
+    never replay another run's answer) must survive resuming -- a resumed
+    run only ever reads/writes its OWN log_path."""
+    records = _tiny_records()
+    other_run_log = tmp_path / "other_run.jsonl"
+    this_run_log = tmp_path / "resume_3.jsonl"
+    stub = _make_stub(
+        {
+            "ORD_A": _resolution("AMEX_SURCHARGE", 1000),
+            "ORD_B": _resolution("MISSING_GST", 200),
+            "UNMATCHED_BANK_UTR_C": _resolution("UNRESOLVED", 0),
+        }
+    )
+    run_agent_block_once(records, stub, other_run_log, logic_version=1)
+    assert not this_run_log.exists()
+
+    calls: list[str] = []
+
+    def _tracking_stub(record):
+        calls.append(gt_key_for_record(record))
+        return stub(record)
+
+    run_agent_block_resuming(records, _tracking_stub, this_run_log, logic_version=1)
+    assert set(calls) == {"ORD_A", "ORD_B", "UNMATCHED_BANK_UTR_C"}, "must diagnose all 3 live, ignoring other_run_log entirely"
 
 
 # ---------------------------------------------------------------------------
