@@ -500,6 +500,78 @@ def test_trigger_batch_run_frozen_makes_zero_live_agent_calls(client, monkeypatc
 
 
 # ---------------------------------------------------------------------------
+# _agent_cache_path_for / live-seed cache isolation (src/api/main.py,
+# 2026-09-04 addendum): real incident, twice -- a live "seed" trigger
+# through the ordinary dashboard/API silently shadowed the frozen dataset's
+# permanent cache entries (record_key is just order_id, assigned
+# positionally, so two different recipes can share order-id strings). Fixed
+# by giving every non-frozen recipe its own cache file, scoped to its exact
+# (seed, records) pair.
+# ---------------------------------------------------------------------------
+
+def test_agent_cache_path_frozen_always_uses_the_shared_default_path():
+    from src.api.main import DEFAULT_AGENT_CACHE_PATH, _agent_cache_path_for
+
+    assert _agent_cache_path_for("frozen", seed=None, records=100) == DEFAULT_AGENT_CACHE_PATH
+    assert _agent_cache_path_for("frozen", seed=42, records=100) == DEFAULT_AGENT_CACHE_PATH  # seed ignored for frozen
+
+
+def test_agent_cache_path_seed_never_matches_the_frozen_path():
+    from src.api.main import DEFAULT_AGENT_CACHE_PATH, _agent_cache_path_for
+
+    assert _agent_cache_path_for("seed", seed=1, records=10) != DEFAULT_AGENT_CACHE_PATH
+
+
+def test_agent_cache_path_seed_scoped_to_its_exact_recipe():
+    from src.api.main import _agent_cache_path_for
+
+    same_a = _agent_cache_path_for("seed", seed=1, records=10)
+    same_b = _agent_cache_path_for("seed", seed=1, records=10)
+    different_seed = _agent_cache_path_for("seed", seed=2, records=10)
+    different_records = _agent_cache_path_for("seed", seed=1, records=20)
+
+    assert same_a == same_b, "the identical (seed, records) recipe must reuse its own cache file"
+    assert different_seed != same_a
+    assert different_records != same_a
+    assert different_seed != different_records
+
+
+def test_live_seed_trigger_never_touches_or_pollutes_the_frozen_cache_file(client, monkeypatch, tmp_path):
+    """End-to-end proof through the real HTTP path: a live seed=1, records=10
+    trigger (the exact recipe that caused the real 2026-09-04 incident) must
+    leave data/agent_runs/layer4_test_cache.jsonl byte-for-byte untouched,
+    and must write its own entries to a separate, recipe-scoped file
+    instead. Stubs only the actual model call (same pattern as test 14
+    above) -- exercises the real default cache-path-selection logic."""
+    import src.agent.graph as graph_module
+    from src.agent.resolution import AgentResolution
+    from src.api.main import AGENT_RUNS_DIR, DEFAULT_AGENT_CACHE_PATH
+
+    def _stub_diagnose(record):
+        resolution = AgentResolution(
+            root_cause_code="UNRESOLVED", quantified_delta_paise=0, evidence_tool_calls=[], confidence_note="stub"
+        )
+        return resolution, {"hop_count": 0, "tool_call_history": [], "status": "HONEST_EXCEPTION", "raw_failure": None, "tokens_used": 0}
+
+    monkeypatch.setattr(graph_module, "diagnose_discrepancy", _stub_diagnose)
+
+    frozen_cache_before = DEFAULT_AGENT_CACHE_PATH.read_bytes()
+    live_seed_path = AGENT_RUNS_DIR / "live_seed_1_10.jsonl"
+    assert not live_seed_path.exists(), "test precondition: no stray file from a prior run"
+
+    try:
+        resp = client.post("/batch-runs", json={"source": "seed", "seed": 1, "records": 10})
+        assert resp.status_code == 200
+
+        assert DEFAULT_AGENT_CACHE_PATH.read_bytes() == frozen_cache_before, (
+            "the frozen dataset's permanent cache must be byte-for-byte untouched by a live seed trigger"
+        )
+        assert live_seed_path.exists(), "the seed recipe's own cache file must have been created instead"
+    finally:
+        live_seed_path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
 # Test 15 -- the seed/live source path is wired through an injectable
 # diagnose_fn -- no real Groq call is required to exercise it in this suite
 # ---------------------------------------------------------------------------

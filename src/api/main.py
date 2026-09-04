@@ -36,9 +36,35 @@ from src.data.models import BankStatementLine, GatewaySettlement, InternalOrder
 from src.forecast.cashflow import project_cashflow
 from src.ledger.journal import trial_balance
 from src.ledger.models import ReconciliationMatch, ensure_schema_exists, get_engine, get_sessionmaker
-from src.orchestration.batch_runner import DiagnoseFn, run_batch
+from src.orchestration.batch_runner import DEFAULT_AGENT_CACHE_PATH, DiagnoseFn, run_batch
 
 FROZEN_DIR = Path(__file__).resolve().parents[2] / "data" / "challenge_batch_100"
+AGENT_RUNS_DIR = DEFAULT_AGENT_CACHE_PATH.parent
+
+
+def _agent_cache_path_for(source: str, seed: int | None, records: int) -> Path:
+    """Which cache file a triggered batch's live agent calls read from and
+    append to. Real incident, twice (2026-09-03 and 2026-09-04 -- the second
+    time from an ordinary live 'seed' trigger through the running dashboard,
+    not a debugging mistake): DEFAULT_AGENT_CACHE_PATH
+    (data/agent_runs/layer4_test_cache.jsonl) is what the frozen dataset's
+    "zero live calls, ever" guarantee depends on (README, evaluate.py's
+    deterministic block, test_trigger_batch_run_frozen_makes_zero_live_agent_calls).
+    record_key() is just order_id, which is assigned positionally within any
+    batch regardless of seed -- so a live seed batch sharing order-id
+    strings with the frozen dataset silently SHADOWED real frozen cache
+    entries under "latest entry wins", forcing wasted live re-diagnosis of
+    records that should have been free. A `source="frozen"` trigger (seed=42,
+    records=100 included, since that regenerates the same data byte-for-byte)
+    always uses the one shared, permanent, committed cache. Any `source="seed"`
+    trigger gets a cache file scoped to its own exact (seed, records) recipe --
+    generate_batch(seed, records) is deterministic, so re-triggering the
+    identical recipe still benefits from its own cache, but it can never
+    collide with the frozen dataset's file, or with a different seed/records
+    combination's file, again."""
+    if source == "frozen":
+        return DEFAULT_AGENT_CACHE_PATH
+    return AGENT_RUNS_DIR / f"live_seed_{seed}_{records}.jsonl"
 
 _engine = None
 _session_factory = None
@@ -197,9 +223,11 @@ def trigger_batch_run(
 ) -> BatchRunSummaryResponse:
     batch_run_id = uuid.uuid4()
     orders, settlements, bank_lines = _load_for_recipe(req.model_dump())
+    agent_cache_path = _agent_cache_path_for(req.source, req.seed, req.records)
     try:
         summary = run_batch(
-            session, batch_run_id, orders, settlements, bank_lines, diagnose_fn=diagnose_fn, as_of=req.as_of
+            session, batch_run_id, orders, settlements, bank_lines, diagnose_fn=diagnose_fn,
+            agent_cache_path=agent_cache_path, as_of=req.as_of,
         )
     except AgentRateLimitedError as exc:
         # Real, diagnosed cause (2026-09-03 debugging session): only the

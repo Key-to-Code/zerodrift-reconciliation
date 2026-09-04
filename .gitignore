@@ -5,5 +5,12 @@ __pycache__/
 .env
 CLAUDE.md
 .claude/
-"CLAUDE.md" 
-".claude/" 
+"CLAUDE.md"
+".claude/"
+
+# Per-recipe live-seed agent caches (src/api/main.py::_agent_cache_path_for) --
+# ephemeral, one per (seed, records) combination anyone happens to try live;
+# not part of the frozen dataset's reproducibility story (unlike the
+# evaluate.py --replay logs, data/agent_runs/frozen_*.jsonl, which ARE
+# committed) and not meant to accumulate in the repo.
+data/agent_runs/live_seed_*.jsonl 
