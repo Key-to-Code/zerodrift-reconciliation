@@ -122,7 +122,23 @@ Root-cause identification was perfect across every run (20/20, all 3 sittings) a
 
 Notably, **even the frozen dataset's own size does not fit a fresh day's budget on its own** — a brand-new 100-record seed needs an estimated 252,682 tokens, over the entire daily cap. Triggering `source="frozen"` only ever costs zero live tokens because its 37 discrepancy records are permanently cached (`data/agent_runs/layer4_test_cache.jsonl`), not because 100 records is a safe live-seed size in general. `RECOMMENDED_MAX_LIVE_SEED_RECORDS` (`src/agent/rate_limiter.py`) is the single source of truth for this number, surfaced on the dashboard's "Bring your own seed" card.
 
-A batch that won't fit today's remaining budget fails cleanly with a clear message before any row is posted (`src/orchestration/batch_runner.py`'s pre-flight check) rather than posting partial results — see the two commits from the 2026-09-03 debugging session for the full incident.
+A batch that won't fit today's remaining budget fails cleanly with a clear message before any row is posted (`src/orchestration/batch_runner.py`'s pre-flight check) rather than posting partial results — see the RCA below for the full incident.
+
+## RCA: the Groq daily-token-cap crash (2026-09-03)
+
+This is a real incident from Layer 4 testing, not an invented one for the sake of having an RCA — both fixes below are real commits, each covered by real tests.
+
+**What broke.** Triggering a live (non-frozen) seed batch of any size other than the exact frozen recipe (`seed=42, records=100`) came back from the API as a bare "Internal Server Error." Tracing it down: an uncaught `groq.RateLimitError: 429 - tokens per day (TPD), Limit 200000, Used 198791` from the underlying Groq client, propagating uncaught through `run_batch` all the way to FastAPI's generic 500 handler — the real reason was completely hidden from whoever hit it.
+
+**Root cause — two distinct gaps, both real:**
+1. `_invoke_with_backoff` (`src/agent/graph.py`) retried a DAILY-quota 429 the same way as a routine PER-MINUTE one — wasting ~30s retrying a failure that structurally cannot clear that fast, then raising anyway.
+2. Nothing tracked cumulative token spend locally. The only way the system discovered it was out of budget was to actually attempt a live call and get a real 429 back from Groq — after some earlier records in the batch had already been posted to the ledger.
+
+**Fix — two commits, same day:**
+- **`fc1d159`** — *Add a local daily-token-budget guard for the Groq agent path.* Distinguishes a daily (TPD) 429 from a per-minute (TPM) one and fails fast instead of retrying; adds `_DailyTokenTracker` (`src/agent/rate_limiter.py`, real Groq `usage_metadata` only, never an estimate) with a fail-fast `check_budget()` at the top of `diagnose_discrepancy`; `src/api/main.py` now catches the resulting `AgentRateLimitedError` and returns a clean 503 with the real reason, instead of a bare 500.
+- **`e7ace91`** — *Pre-flight batch-level budget check: fail before any posting, not mid-batch.* The per-record check from the first fix still let a seed batch die partway through, with earlier records already posted — the frozen dataset has `diagnose_or_replay`'s cache as a safety net for this, but a genuinely unseen seed batch has nothing to fall back on once a live call is needed. Fixed in `src/orchestration/batch_runner.py` by estimating the whole batch's live-call cost — using the real measured average tokens/record, never a hardcoded guess — *before* Stage 1 capture even starts, and raising `AgentRateLimitedError` immediately if it won't fit. Zero rows written, not a partial batch.
+
+Both commits are real (`git show fc1d159`, `git show e7ace91`) and both are covered by real tests (`tests/test_rate_limiter.py`, `tests/test_agent.py`, `tests/test_api.py`). The resulting guardrail is what `RECOMMENDED_MAX_LIVE_SEED_RECORDS` (60 records, above) is built on.
 
 ## A couple of things worth knowing before you dig in
 
