@@ -325,7 +325,7 @@ def test_dashboard_initial_render_shows_trigger_controls(dashboard_client):
     at.run()
 
     assert not at.exception
-    assert at.selectbox(key="trigger_source")
+    assert at.radio(key="trigger_source")  # Source control is a radio, not a selectbox, as of the mockup-replication pass
     assert at.button(key="trigger_button")
     assert at.text_input(key="manual_batch_run_id")
     assert any("Trigger a batch run" in i.value for i in at.info)
@@ -424,6 +424,24 @@ def test_dashboard_manual_batch_run_id_unknown_shows_error_not_crash(dashboard_c
 
     assert not at.exception
     assert any("Unknown batch_run_id" in e.value for e in at.error)
+
+
+def test_dashboard_manual_batch_run_id_unknown_error_not_duplicated(dashboard_client):
+    """Real user-visible bug, 2026-09-04: the banner used to read 'Unknown
+    batch_run_id: unknown batch_run_id: <id>' -- the dashboard's own prefix
+    plus the API's raw detail text, which already says the same thing."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(APP_PATH, default_timeout=30)
+    at.run()
+    at.text_input(key="manual_batch_run_id").set_value(str(uuid.uuid4()))
+    at.button(key="add_manual_button").click()
+    at.run()
+
+    assert not at.exception
+    messages = [e.value for e in at.error]
+    assert any("Unknown batch_run_id" in m for m in messages)
+    assert not any(m.lower().count("unknown batch_run_id") > 1 for m in messages)
 
 
 # ---------------------------------------------------------------------------
@@ -902,8 +920,8 @@ def test_dashboard_sections_gate_to_exactly_one_view_at_a_time(dashboard_client)
     section_headers = {
         "overview": "### Overview",
         "exceptions": "### Exceptions",
-        "ledger": "### Ledger -- trial balance",
-        "forecast": "### Forecast -- confirmed vs. projected",
+        "ledger": "### Ledger - trial balance",
+        "forecast": "### Forecast - confirmed vs. projected",
     }
     for view_key, expected_header in section_headers.items():
         at.button(key=f"nav_{view_key}").click()

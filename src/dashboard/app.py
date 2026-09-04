@@ -47,6 +47,8 @@ import altair as alt
 import polars as pl
 import streamlit as st
 
+st.set_page_config(page_title="ZeroDrift Reconciliation", layout="wide")
+
 from src.agent.rate_limiter import RECOMMENDED_MAX_LIVE_SEED_RECORDS
 from src.common.money import format_inr, from_paise
 from src.dashboard import api_client, tokens
@@ -117,11 +119,11 @@ def _run_badge(batch_run_id: str) -> None:
         source_label = "existing run"
     when = meta.get("triggered_at") or meta.get("loaded_at")
     verb = "triggered" if meta.get("triggered_at") else "added"
-    time_phrase = f" -- {verb} {_time_ago(when)}" if when is not None else ""
+    time_phrase = f" - {verb} {_time_ago(when)}" if when is not None else ""
     st.markdown(
         f'<div class="run-badge-bar">Viewing run '
         f'<span class="mono">{batch_run_id[:8]}...</span>'
-        f' -- {source_label}{time_phrase}</div>',
+        f' - {source_label}{time_phrase}</div>',
         unsafe_allow_html=True,
     )
 
@@ -156,7 +158,7 @@ def _render_overview(batch_run_id: str, status: dict, meta: dict) -> None:
             unsafe_allow_html=True,
         )
         st.caption(
-            f"{status['fast_path']} resolved by deterministic matching alone -- no model call. "
+            f"{status['fast_path']} resolved by deterministic matching alone - no model call. "
             f"{status['agent_resolved']} required agent judgment. "
             f"{status['honest_exception']} could not be confidently resolved and were routed "
             f"to suspense rather than guessed."
@@ -176,18 +178,13 @@ def _render_exceptions(batch_run_id: str) -> None:
             f"These {len(exceptions)} records could not be confidently matched or explained. "
             f"Each is preserved as a suspense entry in the ledger rather than a guess."
         )
-        st.markdown(
-            '<div class="exceptions-header-row">'
-            '<div>Reference</div><div>Category</div><div>Reason</div></div>',
-            unsafe_allow_html=True,
-        )
         for row in exceptions:
             category = api_client.parse_confidence_note_category(row["confidence_note"])
             category_label = api_client.humanize_category(category)
             reason = api_client.parse_confidence_note_reason(row["confidence_note"])
             candidate = api_client.parse_confidence_note_candidate(row["confidence_note"])
             reference = row["utr"] or row["order_id"] or "unknown"
-            with st.expander(f"{reference} -- {category_label}"):
+            with st.expander(f"{reference} - {category_label}"):
                 st.markdown(f'<span class="category-pill">{category_label}</span>', unsafe_allow_html=True)
                 st.write(reason or row["confidence_note"])
                 if candidate != "not applicable":
@@ -201,7 +198,7 @@ def _render_exceptions(batch_run_id: str) -> None:
 
 
 def _render_ledger(batch_run_id: str) -> None:
-    st.markdown("### Ledger -- trial balance")
+    st.markdown("### Ledger - trial balance")
     trial_balance_rows = _load_trial_balance(batch_run_id)
 
     rows_html = ['<div class="ledger-table">']
@@ -244,7 +241,7 @@ def _render_ledger(batch_run_id: str) -> None:
 
 def _render_forecast(batch_run_id: str, as_of: date) -> None:
     st.markdown('<div class="centered-content">', unsafe_allow_html=True)
-    st.markdown("### Forecast -- confirmed vs. projected")
+    st.markdown("### Forecast - confirmed vs. projected")
     forecast_rows = _load_forecast(batch_run_id, as_of=as_of, horizon_days=7)
     chart_data = api_client.build_forecast_chart_data(forecast_rows, as_of)
     if chart_data:
@@ -325,7 +322,7 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
         st.altair_chart(bars, use_container_width=True)
     else:
         st.write(
-            "This run is fully settled -- nothing is currently projected. "
+            "This run is fully settled - nothing is currently projected. "
             "Trigger with a cutoff date to see an in-progress state."
         )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -333,7 +330,7 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
 
 st.set_page_config(page_title="ZeroDrift", layout="wide")
 inject_theme()
-st.title("ZeroDrift -- Reconciliation Dashboard")
+st.title("ZeroDrift - Reconciliation Dashboard")
 
 if "runs" not in st.session_state:
     st.session_state.runs = {}  # batch_run_id -> display label
@@ -345,129 +342,155 @@ if "view" not in st.session_state:
 has_runs = bool(st.session_state.runs)
 
 with st.sidebar:
-    st.caption("ZeroDrift")
+    st.markdown(
+        '<div style="display:flex;align-items:center;gap:8px;padding-bottom:20px;border-bottom:1px solid #EEF0F3;margin-bottom:12px">'
+        '<svg width="24" height="24" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">'
+        '<circle cx="120" cy="120" r="120" fill="#0B1F5B" />'
+        '<text x="110" y="185" font-family="Inter, sans-serif" font-weight="800" font-size="170" fill="#FFFFFF" text-anchor="middle">Z</text>'
+        '</svg>'
+        '<div style="font-size:14px;font-weight:700;color:#12151C;letter-spacing:-0.01em">ZeroDrift</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     for view_key in VIEWS:
         is_active = st.session_state.view == view_key
         disabled = (not has_runs) and view_key != "run"
         wrapper_key = f"nav-active-nav_{view_key}" if is_active else f"nav-inactive-nav_{view_key}"
         with st.container(key=wrapper_key):
-            if st.button(VIEW_LABELS[view_key], key=f"nav_{view_key}", disabled=disabled, use_container_width=True):
+            dot = "▸" if is_active else " "
+            if st.button(f"{dot} {VIEW_LABELS[view_key]}", key=f"nav_{view_key}", disabled=disabled, use_container_width=True):
                 st.session_state.view = view_key
-    st.caption("Reconciliation dashboard")
 
 view = st.session_state.view
 
 if view == "run":
-    run_col_a, run_col_b = st.columns(2)
     active_source = st.session_state.get("trigger_source", "frozen")
 
-    with run_col_a:
-        with st.container(key="run-card-frozen", border=True):
-            st.subheader("Run the frozen benchmark")
-            st.caption(
-                "100 synthetic records, seed 42, committed to this repo -- "
-                "reproduce our numbers yourself."
-            )
-            if active_source != "frozen":
-                st.caption('Switch Source to "frozen" below to use this card.')
-
-    with run_col_b:
-        with st.container(key="run-card-seed", border=True):
-            st.subheader("Bring your own seed")
-            st.caption(
-                "Generates a fresh, never-before-seen batch with the same "
-                "category distribution. Full agent verification may take "
-                "longer and calls a live model."
-            )
-            st.caption(
-                f"Recommended: {RECOMMENDED_MAX_LIVE_SEED_RECORDS} records or fewer. A never-seen batch "
-                "needs a real live model call per record needing judgment, against a hard daily token "
-                "cap on this key -- even the frozen dataset's own 100-record size would not fit a fresh "
-                "day's budget if it weren't already fully cached. A larger batch fails cleanly with a "
-                "clear message rather than posting partial results, but won't succeed until scaled down "
-                "or retried on a later day."
-            )
-            if active_source != "seed":
-                st.caption('Switch Source to "seed" below to use this card.')
-
-    source = st.selectbox("Source", ["frozen", "seed"], key="trigger_source")
-    seed_value = None
-    records_value = 100
-    if source == "seed":
-        seed_value = st.number_input("Seed", min_value=0, value=42, step=1, key="trigger_seed")
-        records_value = st.number_input(
-            "Records",
-            min_value=1,
-            value=100,
-            step=1,
-            key="trigger_records",
-            help=(
-                f"Recommended {RECOMMENDED_MAX_LIVE_SEED_RECORDS} or fewer for a live seed batch -- see "
-                "the daily token budget note above."
-            ),
-        )
-
-    with st.expander("Advanced: cutoff date", expanded=False):
+    with st.container(key="run-card-frozen", border=True):
+        st.subheader("Run the frozen benchmark")
         st.caption(
-            "Limits ledger settlement to a specific date -- use this to see a "
-            "genuine in-progress reconciliation state, e.g. for the forecast "
-            "chart's confirmed vs. projected split."
+            "100 synthetic records, seed 42, committed to this repo - "
+            "reproduce our numbers yourself."
         )
-        gate_stage_2 = st.checkbox(
-            "Limit settlement posting to a cutoff date",
-            key="trigger_gate_stage_2",
+        if active_source != "frozen":
+            st.caption('Switch Source to "frozen" below to use this card.')
+
+    with st.container(key="run-card-seed", border=True):
+        st.subheader("Bring your own seed")
+        st.caption(
+            "Generates a fresh, never-before-seen batch with the same "
+            "category distribution. Full agent verification may take "
+            "longer and calls a live model."
         )
-        trigger_as_of = None
-        if gate_stage_2:
-            trigger_as_of = st.date_input(
-                "Settlement cutoff (as_of)", value=date(2025, 1, 20), key="trigger_as_of"
+        st.caption(
+            f"Recommended: {RECOMMENDED_MAX_LIVE_SEED_RECORDS} records or fewer. A never-seen batch "
+            "needs a real live model call per record needing judgment, against a hard daily token "
+            "cap on this key - even the frozen dataset's own 100-record size would not fit a fresh "
+            "day's budget if it weren't already fully cached. A larger batch fails cleanly with a "
+            "clear message rather than posting partial results, but won't succeed until scaled down "
+            "or retried on a later day."
+        )
+        if active_source != "seed":
+            st.caption('Switch Source to "seed" below to use this card.')
+
+    with st.container(key="run-form-card-config"):
+        source = st.radio("Source", ["frozen", "seed"], key="trigger_source", horizontal=True)
+        seed_value = None
+        records_value = 100
+        if source == "seed":
+            seed_value = st.number_input("Seed", min_value=0, value=42, step=1, key="trigger_seed")
+            records_value = st.number_input(
+                "Records",
+                min_value=1,
+                value=100,
+                step=1,
+                key="trigger_records",
+                help=(
+                    f"Recommended {RECOMMENDED_MAX_LIVE_SEED_RECORDS} or fewer for a live seed batch - see "
+                    "the daily token budget note above."
+                ),
             )
 
-    trigger_label = "Trigger frozen batch" if source == "frozen" else "Trigger live batch"
-    if st.button(trigger_label, key="trigger_button"):
-        with st.spinner("Calling agent, this may take a minute..." if source == "seed" else "Posting to ledger..."):
-            try:
-                summary = api_client.trigger_batch_run(
-                    source,
-                    seed=int(seed_value) if seed_value is not None else None,
-                    records=int(records_value),
-                    as_of=trigger_as_of,
+        with st.expander("Advanced: cutoff date", expanded=False):
+            st.caption(
+                "Limits ledger settlement to a specific date - use this to see a "
+                "genuine in-progress reconciliation state, e.g. for the forecast "
+                "chart's confirmed vs. projected split."
+            )
+            gate_stage_2 = st.checkbox(
+                "Limit settlement posting to a cutoff date",
+                key="trigger_gate_stage_2",
+            )
+            trigger_as_of = None
+            if gate_stage_2:
+                # NOT min_value=date.today() -- confirmed 2026-09-04: this cutoff
+                # selects a point within the frozen dataset's own historical date
+                # range (2025-01-06 to 2025-02-04), which is in the past relative
+                # to the real calendar. A `min_value=date.today()` restriction
+                # (briefly present here) silently clamped every real cutoff date
+                # to today, which is after the whole dataset -- gating nothing at
+                # all (real regression: test_dashboard_trigger_with_cutoff_checkbox_
+                # produces_real_projected_forecast and
+                # test_dashboard_cutoff_caption_shown_when_cutoff_applied both
+                # caught this). 2025-01-20 matches the verified demo cutoff
+                # (docs/plan.md Layer 10).
+                trigger_as_of = st.date_input(
+                    "Settlement cutoff (as_of)", value=date(2025, 1, 20), key="trigger_as_of"
                 )
-                new_id = summary["batch_run_id"]
-                label = f"Seed {int(seed_value)}" if source == "seed" else "Frozen dataset"
-                st.session_state.runs[new_id] = f"{label} · {new_id[:8]}"
-                st.session_state.run_meta[new_id] = {
-                    "source": source,
-                    "seed": int(seed_value) if seed_value is not None else None,
-                    "cutoff": trigger_as_of,
-                    "triggered_at": datetime.now(),
-                }
-                st.session_state.last_loaded_id = new_id
-                st.success(f"Triggered batch run {new_id}")
-            except api_client.ApiClientError as exc:
-                _caution_banner(f"Failed to trigger run: {exc.detail}")
 
-    st.markdown("**Or view an existing run**")
-    manual_id = st.text_input(
-        "Run ID",
-        key="manual_batch_run_id",
-        placeholder="e.g. a1b2c3d4-5678-...",
-        help="Paste a batch_run_id from a previous run to pull it into view without re-triggering it.",
-    )
-    if st.button("Load run", key="add_manual_button"):
-        if not manual_id:
-            _caution_banner("Enter a batch_run_id first.")
-        else:
-            try:
-                api_client.get_status(manual_id)  # validates the run exists
-                st.session_state.runs.setdefault(manual_id, f"Existing run · {manual_id[:8]}")
-                st.session_state.run_meta.setdefault(
-                    manual_id, {"source": "existing", "seed": None, "cutoff": None, "loaded_at": datetime.now()}
-                )
-                st.session_state.last_loaded_id = manual_id
-                st.success(f"Added batch run {manual_id}")
-            except api_client.ApiClientError as exc:
-                st.error(f"Unknown batch_run_id: {exc.detail}")
+        trigger_label = "Trigger frozen batch" if source == "frozen" else "Trigger live batch"
+        if st.button(trigger_label, key="trigger_button"):
+            with st.spinner("Calling agent, this may take a minute..." if source == "seed" else "Posting to ledger..."):
+                try:
+                    summary = api_client.trigger_batch_run(
+                        source,
+                        seed=int(seed_value) if seed_value is not None else None,
+                        records=int(records_value),
+                        as_of=trigger_as_of,
+                    )
+                    new_id = summary["batch_run_id"]
+                    label = f"Seed {int(seed_value)}" if source == "seed" else "Frozen dataset"
+                    st.session_state.runs[new_id] = f"{label} · {new_id[:8]}"
+                    st.session_state.run_meta[new_id] = {
+                        "source": source,
+                        "seed": int(seed_value) if seed_value is not None else None,
+                        "cutoff": trigger_as_of,
+                        "triggered_at": datetime.now(),
+                    }
+                    st.session_state.last_loaded_id = new_id
+                    st.success("Triggered batch run successfully!")
+                    st.code(new_id, language=None)
+                except api_client.ApiClientError as exc:
+                    _caution_banner(f"Failed to trigger run: {exc.detail}")
+
+    with st.container(key="run-form-card-load"):
+        st.markdown("**Or view an existing run**")
+        manual_id = st.text_input(
+            "Run ID",
+            key="manual_batch_run_id",
+            placeholder="e.g. a1b2c3d4-5678-...",
+            help="Paste a batch_run_id from a previous run to pull it into view without re-triggering it.",
+        )
+        if st.button("Load run", key="add_manual_button"):
+            if not manual_id:
+                _caution_banner("Enter a batch_run_id first.")
+            else:
+                try:
+                    api_client.get_status(manual_id)  # validates the run exists
+                    st.session_state.runs.setdefault(manual_id, f"Existing run · {manual_id[:8]}")
+                    st.session_state.run_meta.setdefault(
+                        manual_id, {"source": "existing", "seed": None, "cutoff": None, "loaded_at": datetime.now()}
+                    )
+                    st.session_state.last_loaded_id = manual_id
+                    st.success("Added batch run successfully!")
+                    st.code(manual_id, language=None)
+                except api_client.ApiClientError as exc:
+                    # exc.detail is already the API's own "unknown batch_run_id: <id>"
+                    # text (src/api/main.py::_require_known_run) -- prefixing "Unknown
+                    # batch_run_id:" again duplicated the phrase (real user-visible bug,
+                    # 2026-09-04: "Unknown batch_run_id: unknown batch_run_id: <id>").
+                    # Use the id the user actually typed instead of re-showing exc.detail.
+                    st.error(f"Unknown batch_run_id: {manual_id}")
 
     if not st.session_state.runs:
         st.info("Trigger a batch run or add an existing batch_run_id to begin.")
@@ -475,7 +498,7 @@ if view == "run":
         last_id = st.session_state.get("last_loaded_id") or next(iter(st.session_state.runs))
         with st.container(key="run-loaded-banner"):
             st.markdown(
-                f'Run <span class="mono">{last_id[:8]}...</span> loaded successfully.',
+                f'Run <span class="mono">{last_id}</span> loaded successfully.',
                 unsafe_allow_html=True,
             )
             if st.button("View Overview ->", key="goto_overview_button"):
@@ -509,9 +532,9 @@ else:
         st.info("Select at least one run to view.")
         st.stop()
 
-    as_of = st.session_state.get("forecast_as_of") or date(2025, 1, 6)
+    as_of = st.session_state.get("forecast_as_of") or date.today()
     if view == "forecast":
-        as_of = st.date_input("Forecast as-of date", value=date(2025, 1, 6), key="forecast_as_of")
+        as_of = st.date_input("Forecast as-of date", value=date.today(), min_value=date.today(), key="forecast_as_of")
 
     columns = st.columns(len(selected_runs))
     for column, batch_run_id in zip(columns, selected_runs):
@@ -526,11 +549,14 @@ else:
                 continue
 
             meta = st.session_state.run_meta.get(batch_run_id, {})
-            if view == "overview":
-                _render_overview(batch_run_id, status, meta)
-            elif view == "exceptions":
-                _render_exceptions(batch_run_id)
-            elif view == "ledger":
-                _render_ledger(batch_run_id)
-            elif view == "forecast":
-                _render_forecast(batch_run_id, as_of)
+            try:
+                if view == "overview":
+                    _render_overview(batch_run_id, status, meta)
+                elif view == "exceptions":
+                    _render_exceptions(batch_run_id)
+                elif view == "ledger":
+                    _render_ledger(batch_run_id)
+                elif view == "forecast":
+                    _render_forecast(batch_run_id, as_of)
+            except api_client.ApiClientError as exc:
+                _caution_banner(f"Error loading view: {exc.detail}")

@@ -45,6 +45,12 @@ def inject_theme() -> None:
            active-nav treatment; disabled (no run loaded yet) gets the
            mockup's faint disabled text color instead of Streamlit's default
            greyed-out look. */
+        /* Professional Sidebar */
+        section[data-testid="stSidebar"] {{
+            background-color: {tokens.COLOR_BACKGROUND} !important;
+            border-right: 1px solid {tokens.COLOR_BORDER_SUBTLE};
+            box-shadow: 2px 0 10px rgba(0,0,0,0.02);
+        }}
         [class*="st-key-nav_"] button {{
             width: 100%;
             text-align: left;
@@ -52,12 +58,20 @@ def inject_theme() -> None:
             border: none;
             color: {tokens.MOCKUP_COLOR_TEXT_DARK};
             font-weight: 500;
+            padding: 12px 20px;
+            margin-bottom: 4px;
+            border-radius: {tokens.RADIUS_MEDIUM}px;
+            transition: all 0.2s ease;
         }}
         [class*="st-key-nav_"] button:disabled {{
             color: {tokens.MOCKUP_COLOR_TEXT_DISABLED};
         }}
+        [class*="st-key-nav_"] button:not(:disabled):hover {{
+            background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
+            transform: translateX(4px);
+        }}
         [class*="st-key-nav-active-"] button {{
-            background-color: {tokens.MOCKUP_COLOR_NAV_ACTIVE_BG};
+            background-color: {tokens.MOCKUP_COLOR_NAV_ACTIVE_BG} !important;
             color: {tokens.COLOR_PRIMARY};
             font-weight: 600;
         }}
@@ -117,16 +131,136 @@ def inject_theme() -> None:
 
         /* -- design.md follow-up (Layer 7 UI pass) ------------------------ */
 
-        /* Run screen: two trigger cards + the cutoff expander/date control. */
-        [class*="st-key-run-card-"] {{
+        /* Run screen: two trigger cards + form configuration cards. */
+        [class*="st-key-run-card-"], [class*="st-key-run-form-card"] {{
             background-color: {tokens.COLOR_BACKGROUND};
             border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
             border-radius: {tokens.RADIUS_MEDIUM}px;
             padding: {tokens.SPACING_6}px;
+            margin-bottom: {tokens.SPACING_6}px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+            transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+        }}
+        [class*="st-key-run-card-"]:hover, [class*="st-key-run-form-card"]:hover {{
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+            transform: translateY(-2px);
+            border-color: {tokens.MOCKUP_COLOR_BORDER};
+        }}
+        /* Decorative Radio buttons - Segemented Pill style */
+        div[data-testid="stRadio"] > div[role="radiogroup"] {{
+            display: flex;
+            gap: 8px;
+            background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
+            padding: 6px;
+            border-radius: 99px;
+            width: fit-content;
+            border: 1px solid {tokens.MOCKUP_COLOR_BORDER};
+        }}
+        /* Hide the actual radio circle from Streamlit */
+        div[data-testid="stRadio"] label > div:first-child {{
+            display: none !important;
+        }}
+        div[data-testid="stRadio"] label {{
+            background-color: transparent;
+            padding: 8px 18px;
+            border-radius: 99px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            margin: 0 !important;
+            border: 1px solid transparent;
+        }}
+        div[data-testid="stRadio"] label:hover {{
+            background-color: {tokens.COLOR_BACKGROUND};
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }}
+        div[data-testid="stRadio"] label:has(input[type="radio"]:checked) {{
+            background-color: {tokens.COLOR_BACKGROUND};
+            border: 1px solid {tokens.COLOR_PRIMARY};
+            box-shadow: 0 2px 8px {tokens.COLOR_PRIMARY}30;
+        }}
+        div[data-testid="stRadio"] input[type="radio"]:checked + div {{
+            font-weight: 600;
+            color: {tokens.COLOR_PRIMARY};
+        }}
+        
+        /* Expander Styling */
+        div[data-testid="stExpander"] {{
+            border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
+            border-radius: {tokens.RADIUS_MEDIUM}px;
+            background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }}
+        div[data-testid="stExpander"]:hover {{
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        }}
+        div[data-testid="stExpander"] summary {{
+            padding: 12px 16px;
+            background-color: transparent;
+            font-weight: 600;
+        }}
+        div[data-testid="stExpanderDetails"] {{
+            padding: 16px 24px;
+        }}
+
+        /* Fix Streamlit Popover Dropdowns (Multiselect/Select) */
+        div[data-baseweb="popover"] > div {{
+            background-color: {tokens.COLOR_BACKGROUND} !important;
+            border: 1px solid {tokens.COLOR_BORDER_SUBTLE} !important;
+            border-radius: {tokens.RADIUS_MEDIUM}px !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
+        }}
+
+        /* Premium Checkbox Toggle */
+        div[data-testid="stCheckbox"] label > div:first-child {{
+            border-radius: 99px;
+            width: 36px;
+            height: 20px;
+            background-color: {tokens.COLOR_BORDER_SUBTLE};
+            border: none;
+            position: relative;
+            transition: all 0.25s ease;
+        }}
+        div[data-testid="stCheckbox"] label > div:first-child::after {{
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background-color: white;
+            border-radius: 50%;
+            transition: all 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }}
+        div[data-testid="stCheckbox"] input:checked + div {{
+            background-color: {tokens.COLOR_PRIMARY};
+        }}
+        div[data-testid="stCheckbox"] input:checked + div::after {{
+            transform: translateX(16px);
+        }}
+        div[data-testid="stCheckbox"] label > div:first-child svg {{
+            display: none !important;
+        }}
+
+        /* Date Picker Styling */
+        div[data-testid="stDateInput"] > div {{
+            background-color: {tokens.COLOR_BACKGROUND};
+            border-radius: {tokens.RADIUS_SMALL}px;
+            border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            padding: 2px;
+        }}
+        div[data-testid="stDateInput"] > div:focus-within {{
+            border-color: {tokens.COLOR_PRIMARY};
+            box-shadow: 0 0 0 3px {tokens.COLOR_PRIMARY}20;
         }}
         [class*="st-key-trigger_as_of"] input, [class*="st-key-forecast_as_of"] input {{
-            border-radius: {tokens.RADIUS_SMALL}px;
-            border: 1px solid {tokens.COLOR_PRIMARY};
+            font-family: {tokens.MOCKUP_FONT_MONO};
+            padding: 8px 12px;
+            border: none !important;
+            box-shadow: none !important;
         }}
 
         /* Overview: accent-left-border metric cards with a hover lift, and
@@ -135,20 +269,37 @@ def inject_theme() -> None:
            segment share the "metric-card-<status>"/"bar-segment-<status>"
            name fragment so one selector covers every run's column. */
         [class*="metric-card-"] div[data-testid="stMetric"] {{
-            transition: box-shadow 0.15s ease, transform 0.15s ease;
+            background-color: {tokens.COLOR_BACKGROUND};
+            border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
+            border-radius: {tokens.RADIUS_MEDIUM}px;
+            padding: {tokens.SPACING_4}px {tokens.SPACING_6}px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+            transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
         }}
         [class*="metric-card-"] div[data-testid="stMetric"]:hover {{
-            box-shadow: {tokens.SHADOW_HOVER};
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
         }}
         [class*="metric-card-positive"] div[data-testid="stMetric"] {{
             border-left: 4px solid {tokens.ACTIVE_COLOR_SUCCESS};
         }}
+        [class*="metric-card-positive"] div[data-testid="stMetric"]:hover {{
+            border-color: {tokens.ACTIVE_COLOR_SUCCESS};
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_SUCCESS}40;
+        }}
         [class*="metric-card-information"] div[data-testid="stMetric"] {{
             border-left: 4px solid {tokens.ACTIVE_COLOR_INFO};
         }}
+        [class*="metric-card-information"] div[data-testid="stMetric"]:hover {{
+            border-color: {tokens.ACTIVE_COLOR_INFO};
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_INFO}40;
+        }}
         [class*="metric-card-notice"] div[data-testid="stMetric"] {{
             border-left: 4px solid {tokens.ACTIVE_COLOR_CAUTION};
+        }}
+        [class*="metric-card-notice"] div[data-testid="stMetric"]:hover {{
+            border-color: {tokens.ACTIVE_COLOR_CAUTION};
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_CAUTION}40;
         }}
 
         .stacked-bar {{
@@ -166,37 +317,49 @@ def inject_theme() -> None:
         .stacked-bar > div {{
             transition: opacity 0.15s ease;
         }}
-        [class*="overview-section-"]:has(.bar-segment-positive:hover) [class*="metric-card-positive"] div[data-testid="stMetric"],
-        [class*="overview-section-"]:has(.bar-segment-information:hover) [class*="metric-card-information"] div[data-testid="stMetric"],
-        [class*="overview-section-"]:has(.bar-segment-notice:hover) [class*="metric-card-notice"] div[data-testid="stMetric"] {{
-            box-shadow: {tokens.SHADOW_HOVER};
+        [class*="overview-section-"]:has(.bar-segment-positive:hover) [class*="metric-card-positive"] div[data-testid="stMetric"] {{
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_SUCCESS}40;
+            border-color: {tokens.ACTIVE_COLOR_SUCCESS};
             transform: translateY(-2px);
+        }}
+        [class*="overview-section-"]:has(.bar-segment-information:hover) [class*="metric-card-information"] div[data-testid="stMetric"] {{
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_INFO}40;
+            border-color: {tokens.ACTIVE_COLOR_INFO};
+            transform: translateY(-2px);
+        }}
+        [class*="overview-section-"]:has(.bar-segment-notice:hover) [class*="metric-card-notice"] div[data-testid="stMetric"] {{
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_CAUTION}40;
+            border-color: {tokens.ACTIVE_COLOR_CAUTION};
+            transform: translateY(-2px);
+        }}
+        
+        /* Highlight bar segment when hovering its card */
+        [class*="overview-section-"]:has([class*="metric-card-"] div[data-testid="stMetric"]:hover) .stacked-bar > div {{
+            opacity: 0.3;
+        }}
+        [class*="overview-section-"]:has([class*="metric-card-positive"] div[data-testid="stMetric"]:hover) .bar-segment-positive {{
+            opacity: 1 !important;
+            filter: brightness(1.15);
+        }}
+        [class*="overview-section-"]:has([class*="metric-card-information"] div[data-testid="stMetric"]:hover) .bar-segment-information {{
+            opacity: 1 !important;
+            filter: brightness(1.15);
+        }}
+        [class*="overview-section-"]:has([class*="metric-card-notice"] div[data-testid="stMetric"]:hover) .bar-segment-notice {{
+            opacity: 1 !important;
+            filter: brightness(1.15);
         }}
 
         /* Exceptions: category pill. All categories share one caution tint
            (design.md 3.3.2) -- the pill communicates "needs a human," not
            which category, so one color is correct, not a missing feature. */
-        .exceptions-header-row {{
-            display: grid;
-            grid-template-columns: 1.3fr 1.3fr 3fr;
-            padding: 10px 16px;
-            background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
-            border: 1px solid {tokens.MOCKUP_COLOR_BORDER};
-            border-bottom: none;
-            border-radius: {tokens.RADIUS_MEDIUM}px {tokens.RADIUS_MEDIUM}px 0 0;
-            font-size: 0.68rem;
-            font-weight: 600;
-            color: {tokens.MOCKUP_COLOR_TEXT_MUTED};
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-        }}
-
         .category-pill {{
             display: inline-block;
             background-color: {tokens.MOCKUP_COLOR_CAUTION_BG};
             color: {tokens.MOCKUP_COLOR_CAUTION_TEXT};
             border-radius: 999px;
-            padding: 3px 9px;
+            padding: 4px 10px;
+            margin-bottom: {tokens.SPACING_4}px;
             font-size: 0.7rem;
             font-weight: 500;
         }}
@@ -213,8 +376,9 @@ def inject_theme() -> None:
         }}
         .ledger-row {{
             display: grid;
-            grid-template-columns: 1fr 2.4fr 1fr 1.2fr 1.2fr 1.2fr;
-            padding: 10px 18px;
+            grid-template-columns: 1.5fr 2.5fr 1fr 1.2fr 1.2fr 1.2fr;
+            gap: 16px;
+            padding: 12px 20px;
             border-bottom: 1px solid {tokens.MOCKUP_COLOR_BORDER_SUBTLE};
             color: {tokens.MOCKUP_COLOR_TEXT_DARK};
             align-items: center;
@@ -256,6 +420,8 @@ def inject_theme() -> None:
             border: 1px solid {tokens.MOCKUP_COLOR_CAUTION_BORDER};
             border-radius: {tokens.RADIUS_SMALL}px;
             padding: {tokens.SPACING_4}px {tokens.SPACING_5}px;
+            margin-top: 8px;
+            margin-bottom: 12px;
             color: {tokens.MOCKUP_COLOR_CAUTION_TEXT};
         }}
 
