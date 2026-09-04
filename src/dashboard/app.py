@@ -274,14 +274,17 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
 
         st.caption("Projected bars carry a +/-5% settlement-day slip, illustrative.")
 
+        date_keys = list(chart_data.keys())
+        date_labels = {d: datetime.strptime(d, "%Y-%m-%d").strftime("%d %b") for d in date_keys}
+
         long_rows = []
         for d, v in chart_data.items():
             for series, paise_amount in (("Confirmed", v["confirmed"]), ("Projected", v["projected"])):
                 long_rows.append(
                     {
-                        "date": d,
+                        "date_label": date_labels[d],
                         "series": series,
-                        "amount_paise": paise_amount,
+                        "amount_rupees": float(from_paise(paise_amount)),
                         "amount_label": f"₹{format_inr(from_paise(paise_amount))}",
                     }
                 )
@@ -293,31 +296,79 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
             opacity_enc = alt.condition(
                 alt.FieldEqualPredicate(field="series", equal=selected_series),
                 alt.value(1.0),
-                alt.value(0.25),
+                alt.value(0.22),
             )
         else:
-            opacity_enc = alt.condition(alt.datum.series == "Projected", alt.value(0.55), alt.value(1.0))
+            opacity_enc = alt.condition(alt.datum.series == "Projected", alt.value(0.62), alt.value(1.0))
+
+        color_enc = alt.Color(
+            "series:N",
+            sort=["Confirmed", "Projected"],
+            scale=alt.Scale(
+                domain=["Confirmed", "Projected"],
+                range=[tokens.ACTIVE_COLOR_SUCCESS, tokens.ACTIVE_COLOR_INFO],
+            ),
+            legend=alt.Legend(
+                title=None,
+                orient="top",
+                direction="horizontal",
+                symbolType="square",
+                symbolSize=90,
+                labelFontSize=12,
+                labelColor=tokens.MOCKUP_COLOR_TEXT_MUTED,
+                padding=0,
+                offset=8,
+            ),
+        )
+        shared_encodings = dict(
+            x=alt.X(
+                "date_label:N",
+                title=None,
+                sort=[date_labels[d] for d in date_keys],
+                axis=alt.Axis(
+                    domain=False, ticks=False, labelAngle=0, labelPadding=10, labelColor=tokens.MOCKUP_COLOR_TEXT_MUTED
+                ),
+            ),
+            xOffset=alt.XOffset("series:N", sort=["Confirmed", "Projected"]),
+        )
 
         bars = (
             alt.Chart(long_df.to_pandas())
-            .mark_bar(stroke=None)
-            .encode(
-                x=alt.X("date:N", title=None),
-                xOffset=alt.XOffset("series:N"),
-                y=alt.Y("amount_paise:Q", title="Amount (paise)"),
-                color=alt.Color(
-                    "series:N",
-                    scale=alt.Scale(
-                        domain=["Confirmed", "Projected"],
-                        range=[tokens.ACTIVE_COLOR_SUCCESS, tokens.ACTIVE_COLOR_INFO],
-                    ),
-                    legend=alt.Legend(title=None),
-                ),
-                opacity=opacity_enc,
-                strokeDash=alt.condition(alt.datum.series == "Projected", alt.value([4, 2]), alt.value([0])),
-                tooltip=["date:N", "series:N", "amount_label:N"],
+            .mark_bar(
+                cornerRadiusTopLeft=3,
+                cornerRadiusTopRight=3,
+                strokeWidth=1.25,
+                width=alt.RelativeBandSize(0.82),
             )
-            .properties(height=380)
+            .encode(
+                **shared_encodings,
+                y=alt.Y(
+                    "amount_rupees:Q",
+                    title="Amount (₹)",
+                    axis=alt.Axis(
+                        format="~s",
+                        domain=False,
+                        ticks=False,
+                        gridColor=tokens.MOCKUP_COLOR_BORDER_SUBTLE,
+                        labelColor=tokens.MOCKUP_COLOR_TEXT_MUTED,
+                        titleColor=tokens.MOCKUP_COLOR_TEXT_MUTED,
+                        titleFontWeight=500,
+                    ),
+                ),
+                color=color_enc,
+                stroke=color_enc,
+                strokeDash=alt.condition(alt.datum.series == "Projected", alt.value([4, 3]), alt.value([1, 0])),
+                opacity=opacity_enc,
+                tooltip=[
+                    alt.Tooltip("date_label:N", title="Date"),
+                    alt.Tooltip("series:N", title="Status"),
+                    alt.Tooltip("amount_label:N", title="Amount"),
+                ],
+            )
+            .properties(height=340)
+            .configure_view(strokeWidth=0)
+            .configure_axis(labelFontSize=11, titleFontSize=11, labelFont=tokens.MOCKUP_FONT_TEXT, titleFont=tokens.MOCKUP_FONT_TEXT)
+            .configure_legend(labelFont=tokens.MOCKUP_FONT_TEXT)
         )
         st.altair_chart(bars, use_container_width=True)
     else:
