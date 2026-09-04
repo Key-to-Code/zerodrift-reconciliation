@@ -223,13 +223,25 @@ def test_readme_trial_balance_rows_present_and_correct(live_deterministic_report
 # ---------------------------------------------------------------------------
 
 def test_readme_agent_block_matches_replayed_sweep():
+    # A file EXISTING is not the same as a run being COMPLETE (real gap,
+    # 2026-09-04: run 3 stopped 22/37 records in, same as run 2 once did --
+    # frozen_3.jsonl existed but scoring it raised ValueError for the 15
+    # still-missing records). Skip until every log actually covers every
+    # record ground_truth.json expects a resolution for, not just until the
+    # file is present.
     log_paths = [AGENT_RUNS_DIR / f"frozen_{i}.jsonl" for i in (1, 2, 3)]
-    if not all(p.exists() for p in log_paths):
+    _, _, _, ground_truth = load_frozen_dataset()
+    expected_keys = {
+        g.order_id for g in ground_truth if g.expected_resolution in ("agent_resolved", "honest_exception")
+    }
+    incomplete = [
+        p for p in log_paths if not p.exists() or expected_keys - set(resolutions_from_log(p).keys())
+    ]
+    if incomplete:
         pytest.skip(
-            "agent-block 3-run sweep not complete yet (data/agent_runs/frozen_1/2/3.jsonl) -- "
+            f"agent-block 3-run sweep not complete yet ({[p.name for p in incomplete]} missing or partial) -- "
             "gathered across multiple days per evaluate.py's Groq daily-token-cap note"
         )
-    _, _, _, ground_truth = load_frozen_dataset()
     run_resolutions = [resolutions_from_log(p) for p in log_paths]
     live_report_text = format_agent_block_report(score_agent_runs(run_resolutions, ground_truth))
 
