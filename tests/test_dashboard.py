@@ -506,6 +506,67 @@ def test_dashboard_forecast_chart_section_renders_without_exception(dashboard_cl
     assert not at.exception
 
 
+def test_ledger_table_is_one_shared_grid_not_per_row_grids(dashboard_client):
+    """Real reported bug, 2026-09-04: each row used to be its own
+    independent `display: grid` container (class="ledger-row"), which lets
+    different rows' fr-columns drift out of alignment with each other.
+    Fixed by making the table itself the one shared grid and every cell a
+    direct child -- this asserts the fix's structural signature: the old
+    per-row wrapper class is gone, and cells attach straight to
+    class="ledger-table"."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(APP_PATH, default_timeout=30)
+    at.run()
+    at.button(key="trigger_button").click()
+    at.run()
+    at.button(key="nav_ledger").click()
+    at.run()
+
+    assert not at.exception
+    ledger_markdown = next(m.value for m in at.markdown if 'class="ledger-table"' in m.value)
+    assert 'class="ledger-row' not in ledger_markdown, "the old per-row grid wrapper must be gone"
+    assert ledger_markdown.count('class="ledger-cell') >= 6 * 2, "expects a flat run of ledger-cell divs"
+
+
+def test_forecast_show_data_expander_renders_matching_grid_table(dashboard_client):
+    """The custom "Show data" control (theme.py hides Vega-Embed's own
+    default action menu instead) reuses the same grid-table component the
+    Ledger view uses, not a one-off table."""
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(APP_PATH, default_timeout=30)
+    at.run()
+    at.checkbox(key="trigger_gate_stage_2").set_value(True)
+    at.run()
+    at.date_input(key="trigger_as_of").set_value(date(2025, 1, 20))
+    at.button(key="trigger_button").click()
+    at.run()
+    at.button(key="nav_forecast").click()
+    at.run()
+
+    assert not at.exception
+    assert any("Show data" in e.label for e in at.expander)
+    data_table_markdown = next((m.value for m in at.markdown if 'class="forecast-data-table"' in m.value), None)
+    assert data_table_markdown is not None
+    assert "Confirmed" in data_table_markdown and "Projected" in data_table_markdown
+
+
+def test_indian_axis_label_expr_uses_lakh_crore_thresholds():
+    """AppTest cannot inspect a rendered Vega-Lite spec's axis internals
+    any more than it can the chart's series data (see test 19's own
+    docstring) -- the honest limit here is asserting the real expression
+    string app.py actually passes to Altair contains the correct Indian
+    (lakh=10^5, crore=10^7) thresholds and suffixes, not a human glancing
+    at a screenshot forever standing in for a test."""
+    from src.dashboard.app import _INDIAN_AXIS_LABEL_EXPR
+
+    assert "100000" in _INDIAN_AXIS_LABEL_EXPR
+    assert "10000000" in _INDIAN_AXIS_LABEL_EXPR
+    assert "'L'" in _INDIAN_AXIS_LABEL_EXPR
+    assert "'Cr'" in _INDIAN_AXIS_LABEL_EXPR
+
+
 # ---------------------------------------------------------------------------
 # Test 20 -- two runs selected in the run selector render independently,
 # side by side, each keyed by its own batch_run_id (AC7). REWRITTEN for

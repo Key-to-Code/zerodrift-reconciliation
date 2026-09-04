@@ -364,28 +364,51 @@ def inject_theme() -> None:
             font-weight: 500;
         }}
 
-        /* Ledger: custom HTML grid table (not st.dataframe -- a Styler
-           can't render the TOTAL row's checkmark badge). Column widths
-           mirror the mockup's grid-template-columns. */
-        .ledger-table {{
+        /* Grid tables: custom HTML (not st.dataframe -- a Styler can't
+           render the ledger TOTAL row's checkmark badge). Shared by the
+           Ledger and the Forecast "Show data" table so both read as one
+           consistent component, not two one-off tables.
+
+           FIX (2026-09-04): every "row" used to be its OWN independent
+           `display: grid` container. Independent per-row grids each size
+           their fr-columns from THEIR OWN content only -- if one row's
+           content pushed a column past its fr-share (min-content overflow,
+           a routine CSS grid gotcha `minmax(0, Nfr)` avoids but plain `Nfr`
+           does not), that row's column boundaries drift from every other
+           row's, so cells stop lining up down the table ("rows don't end
+           at the same place" -- real, reported bug). Fixed by making the
+           TABLE ITSELF the one shared grid (every cell div is now a direct
+           child, no per-row wrapper) so column tracks are computed ONCE,
+           from the widest content across every row combined, and every
+           row's cells snap to those exact shared boundaries -- this is
+           the only way two independent rows can be guaranteed pixel-
+           identical column widths in CSS grid. Per-row background/border
+           (header/total-row shading) moves onto each cell individually
+           (.ledger-cell-header / .ledger-total-row on every cell of that
+           logical row) since a shared grid has no per-row box to paint --
+           contiguous cells sharing a background produces the same visual
+           band with the added benefit of always being in alignment. */
+        .ledger-table, .forecast-data-table {{
+            display: grid;
             background-color: {tokens.MOCKUP_COLOR_CARD_BACKGROUND};
             border: 1px solid {tokens.MOCKUP_COLOR_BORDER};
             border-radius: {tokens.RADIUS_MEDIUM}px;
             overflow: hidden;
-            font-size: 0.85rem;
+            font-size: 0.92rem;
         }}
-        .ledger-row {{
-            display: grid;
-            grid-template-columns: 1.5fr 2.5fr 1fr 1.2fr 1.2fr 1.2fr;
-            gap: 16px;
-            padding: 12px 20px;
+        .ledger-table {{ grid-template-columns: 1.3fr 2.6fr 0.9fr 1.15fr 1.15fr 1.15fr; }}
+        .forecast-data-table {{ grid-template-columns: 1fr 1.3fr 1.3fr; }}
+        .ledger-cell {{
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            padding: 16px 22px;
             border-bottom: 1px solid {tokens.MOCKUP_COLOR_BORDER_SUBTLE};
             color: {tokens.MOCKUP_COLOR_TEXT_DARK};
-            align-items: center;
         }}
-        .ledger-header-row {{
+        .ledger-cell-header {{
             background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
-            font-size: 0.68rem;
+            font-size: 0.7rem;
             font-weight: 600;
             color: {tokens.MOCKUP_COLOR_TEXT_MUTED};
             text-transform: uppercase;
@@ -399,7 +422,7 @@ def inject_theme() -> None:
             border-bottom: none;
             color: {tokens.MOCKUP_COLOR_TEXT_DARK};
         }}
-        .ledger-cell-right {{ text-align: right; }}
+        .ledger-cell-right {{ justify-content: flex-end; text-align: right; }}
         .balanced-badge {{
             display: inline-flex;
             align-items: center;
@@ -425,12 +448,65 @@ def inject_theme() -> None:
             color: {tokens.MOCKUP_COLOR_CAUTION_TEXT};
         }}
 
-        /* Forecast: centered content column. */
+        /* Forecast: wide centered content column -- widened from the
+           mockup's original 900px (real feedback: the chart read as
+           cramped) to give the now-larger chart real room. */
         .centered-content {{
-            max-width: 900px;
+            max-width: 1240px;
             margin-left: auto;
             margin-right: auto;
         }}
+
+        /* Forecast summary cards -- same accent-left-border + hover-lift
+           treatment as the Overview metric cards (Section 1.5), reusing
+           the identical Confirmed/Projected tokens the chart itself uses
+           (design.md: no third, unrelated palette for this screen). These
+           wrap a plain st.container(border=True), not a stMetric, hence a
+           separate selector from [class*="metric-card-"] above. */
+        [class*="st-key-forecast-card-"] {{
+            background-color: {tokens.COLOR_BACKGROUND};
+            border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
+            border-radius: {tokens.RADIUS_MEDIUM}px;
+            padding: {tokens.SPACING_5}px {tokens.SPACING_6}px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+            transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+        }}
+        [class*="st-key-forecast-card-"]:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }}
+        [class*="st-key-forecast-card-confirmed"] {{ border-left: 4px solid {tokens.ACTIVE_COLOR_SUCCESS}; }}
+        [class*="st-key-forecast-card-confirmed"]:hover {{
+            border-color: {tokens.ACTIVE_COLOR_SUCCESS};
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_SUCCESS}40;
+        }}
+        [class*="st-key-forecast-card-projected"] {{ border-left: 4px solid {tokens.ACTIVE_COLOR_INFO}; }}
+        [class*="st-key-forecast-card-projected"]:hover {{
+            border-color: {tokens.ACTIVE_COLOR_INFO};
+            box-shadow: 0 4px 12px {tokens.ACTIVE_COLOR_INFO}40;
+        }}
+        .forecast-card-label {{
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: {tokens.MOCKUP_COLOR_TEXT_MUTED};
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-bottom: 4px;
+        }}
+        [class*="st-key-forecast-card-"] .money-figure {{
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: {tokens.MOCKUP_COLOR_TEXT_DARK};
+        }}
+
+        /* A custom "Show data" expander replaces Vega-Embed's own default
+           "..." action menu (real feedback: unstyled, generic, out of
+           place next to the rest of this UI) -- hide vega-embed's chrome
+           entirely rather than leave two competing controls. Standard
+           vega-embed DOM: a <details class="vega-embed"><summary> toggle
+           opening a .vega-actions dropdown. */
+        .vega-embed summary {{ display: none !important; }}
+        .vega-embed .vega-actions {{ display: none !important; }}
         </style>
         """,
         unsafe_allow_html=True,

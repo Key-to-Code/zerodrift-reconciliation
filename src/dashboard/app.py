@@ -199,49 +199,75 @@ def _render_exceptions(batch_run_id: str) -> None:
 
 def _render_ledger(batch_run_id: str) -> None:
     st.markdown("### Ledger - trial balance")
+    st.caption(
+        "Every account's closing debit/credit balance for this run. The TOTAL row "
+        "must net to exactly zero for the books to balance."
+    )
     trial_balance_rows = _load_trial_balance(batch_run_id)
 
-    rows_html = ['<div class="ledger-table">']
-    rows_html.append(
-        '<div class="ledger-row ledger-header-row">'
-        '<div>Code</div><div>Account</div><div>Type</div>'
-        '<div class="ledger-cell-right">Debit</div>'
-        '<div class="ledger-cell-right">Credit</div>'
-        '<div class="ledger-cell-right">Net</div></div>'
-    )
+    # One shared grid for the whole table (see theme.py's .ledger-table comment) --
+    # every cell below is a direct child, never wrapped in a per-row div, so
+    # column widths are computed once, across every row together, and every
+    # row's cells land on identical boundaries.
+    cells_html = ['<div class="ledger-table">']
+    for i, label in enumerate(("Code", "Account", "Type", "Debit", "Credit", "Net")):
+        right = " ledger-cell-right" if i >= 3 else ""
+        cells_html.append(f'<div class="ledger-cell ledger-cell-header{right}">{label}</div>')
+
     total_row = None
     for row in trial_balance_rows:
         if row["account_code"] == "TOTAL":
             total_row = row
             continue
-        rows_html.append(
-            f'<div class="ledger-row">'
-            f'<div class="mono">{row["account_code"]}</div>'
-            f'<div>{row["account_name"]}</div>'
-            f'<div>{row["account_type"]}</div>'
-            f'<div class="mono ledger-cell-right">{format_inr(from_paise(row["debit_total_paise"]))}</div>'
-            f'<div class="mono ledger-cell-right">{format_inr(from_paise(row["credit_total_paise"]))}</div>'
-            f'<div class="mono ledger-cell-right">{format_inr(from_paise(row["net_balance_paise"]))}</div>'
-            f'</div>'
+        cells_html.append(f'<div class="ledger-cell mono">{row["account_code"]}</div>')
+        cells_html.append(f'<div class="ledger-cell">{row["account_name"]}</div>')
+        cells_html.append(f'<div class="ledger-cell">{row["account_type"]}</div>')
+        cells_html.append(
+            f'<div class="ledger-cell mono ledger-cell-right">{format_inr(from_paise(row["debit_total_paise"]))}</div>'
+        )
+        cells_html.append(
+            f'<div class="ledger-cell mono ledger-cell-right">{format_inr(from_paise(row["credit_total_paise"]))}</div>'
+        )
+        cells_html.append(
+            f'<div class="ledger-cell mono ledger-cell-right">{format_inr(from_paise(row["net_balance_paise"]))}</div>'
         )
     if total_row is not None:
         net = from_paise(total_row["net_balance_paise"])
         badge = '<span class="balanced-badge">&#10003;</span>' if net == Decimal("0.00") else ""
-        rows_html.append(
-            f'<div class="ledger-row ledger-total-row">'
-            f'<div></div><div>TOTAL</div><div></div>'
-            f'<div class="mono ledger-cell-right">{format_inr(from_paise(total_row["debit_total_paise"]))}</div>'
-            f'<div class="mono ledger-cell-right">{format_inr(from_paise(total_row["credit_total_paise"]))}</div>'
-            f'<div class="mono ledger-cell-right">{badge}{format_inr(net)}</div>'
-            f'</div>'
+        cells_html.append('<div class="ledger-cell ledger-total-row"></div>')
+        cells_html.append('<div class="ledger-cell ledger-total-row">TOTAL</div>')
+        cells_html.append('<div class="ledger-cell ledger-total-row"></div>')
+        cells_html.append(
+            f'<div class="ledger-cell ledger-total-row mono ledger-cell-right">'
+            f'{format_inr(from_paise(total_row["debit_total_paise"]))}</div>'
         )
-    rows_html.append('</div>')
-    st.markdown("".join(rows_html), unsafe_allow_html=True)
+        cells_html.append(
+            f'<div class="ledger-cell ledger-total-row mono ledger-cell-right">'
+            f'{format_inr(from_paise(total_row["credit_total_paise"]))}</div>'
+        )
+        cells_html.append(
+            f'<div class="ledger-cell ledger-total-row mono ledger-cell-right">{badge}{format_inr(net)}</div>'
+        )
+    cells_html.append('</div>')
+    st.markdown("".join(cells_html), unsafe_allow_html=True)
+
+
+_INDIAN_AXIS_LABEL_EXPR = (
+    "datum.value == 0 ? '0' : "
+    "abs(datum.value) >= 10000000 ? format(datum.value/10000000, '.2~f') + 'Cr' : "
+    "abs(datum.value) >= 100000 ? format(datum.value/100000, '.2~f') + 'L' : "
+    "abs(datum.value) >= 1000 ? format(datum.value/1000, '.1~f') + 'k' : "
+    "format(datum.value, '.0f')"
+)
 
 
 def _render_forecast(batch_run_id: str, as_of: date) -> None:
     st.markdown('<div class="centered-content">', unsafe_allow_html=True)
     st.markdown("### Forecast - confirmed vs. projected")
+    st.caption(
+        "Cash already posted to CASH (confirmed) versus still in-flight through the "
+        "settlement pipeline (projected), over the next 7 days."
+    )
     forecast_rows = _load_forecast(batch_run_id, as_of=as_of, horizon_days=7)
     chart_data = api_client.build_forecast_chart_data(forecast_rows, as_of)
     if chart_data:
@@ -256,7 +282,8 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
         with summary_cols[0]:
             with st.container(key=f"forecast-card-confirmed-{batch_run_id}", border=True):
                 st.markdown(
-                    f'Confirmed: <span class="money-figure">₹{format_inr(total_confirmed)}</span>',
+                    '<div class="forecast-card-label">Confirmed cash</div>'
+                    f'<span class="money-figure">₹{format_inr(total_confirmed)}</span>',
                     unsafe_allow_html=True,
                 )
                 if st.button("Highlight confirmed", key=f"highlight_confirmed_{batch_run_id}"):
@@ -265,7 +292,8 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
         with summary_cols[1]:
             with st.container(key=f"forecast-card-projected-{batch_run_id}", border=True):
                 st.markdown(
-                    f'Projected: <span class="money-figure">₹{format_inr(total_projected)}</span>',
+                    '<div class="forecast-card-label">Projected cash</div>'
+                    f'<span class="money-figure">₹{format_inr(total_projected)}</span>',
                     unsafe_allow_html=True,
                 )
                 if st.button("Highlight projected", key=f"highlight_projected_{batch_run_id}"):
@@ -346,7 +374,10 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
                     "amount_rupees:Q",
                     title="Amount (₹)",
                     axis=alt.Axis(
-                        format="~s",
+                        # Indian numbering (L/Cr), not SI (k/M) -- d3-format has no
+                        # native lakh/crore scale, so this is a Vega expression
+                        # rather than a `format` specifier string.
+                        labelExpr=_INDIAN_AXIS_LABEL_EXPR,
                         domain=False,
                         ticks=False,
                         gridColor=tokens.MOCKUP_COLOR_BORDER_SUBTLE,
@@ -365,12 +396,32 @@ def _render_forecast(batch_run_id: str, as_of: date) -> None:
                     alt.Tooltip("amount_label:N", title="Amount"),
                 ],
             )
-            .properties(height=340)
+            .properties(height=460)
             .configure_view(strokeWidth=0)
-            .configure_axis(labelFontSize=11, titleFontSize=11, labelFont=tokens.MOCKUP_FONT_TEXT, titleFont=tokens.MOCKUP_FONT_TEXT)
+            .configure_axis(labelFontSize=12, titleFontSize=12, labelFont=tokens.MOCKUP_FONT_TEXT, titleFont=tokens.MOCKUP_FONT_TEXT)
             .configure_legend(labelFont=tokens.MOCKUP_FONT_TEXT)
         )
         st.altair_chart(bars, use_container_width=True)
+
+        # Replaces Vega-Embed's own default action menu (hidden via theme.py's
+        # .vega-embed summary rule) with a control that matches the rest of the
+        # app, opening the same grid-table component the Ledger view uses.
+        with st.expander("Show data"):
+            table_html = ['<div class="forecast-data-table">']
+            for label in ("Date", "Confirmed", "Projected"):
+                right = "" if label == "Date" else " ledger-cell-right"
+                table_html.append(f'<div class="ledger-cell ledger-cell-header{right}">{label}</div>')
+            for d in date_keys:
+                v = chart_data[d]
+                table_html.append(f'<div class="ledger-cell">{date_labels[d]}</div>')
+                table_html.append(
+                    f'<div class="ledger-cell mono ledger-cell-right">₹{format_inr(from_paise(v["confirmed"]))}</div>'
+                )
+                table_html.append(
+                    f'<div class="ledger-cell mono ledger-cell-right">₹{format_inr(from_paise(v["projected"]))}</div>'
+                )
+            table_html.append('</div>')
+            st.markdown("".join(table_html), unsafe_allow_html=True)
     else:
         st.write(
             "This run is fully settled - nothing is currently projected. "
