@@ -13,6 +13,7 @@ from groq import BadRequestError, RateLimitError
 
 from src.agent.rate_limiter import (
     DAILY_TOKEN_BUDGET,
+    RECOMMENDED_MAX_LIVE_SEED_RECORDS,
     SAFETY_MARGIN_TOKENS,
     AgentRateLimitedError,
     _DailyTokenTracker,
@@ -182,3 +183,41 @@ def test_check_budget_for_batch_error_names_the_frozen_dataset_fallback():
     daily_token_tracker.record_usage(DAILY_TOKEN_BUDGET)
     with pytest.raises(AgentRateLimitedError, match="frozen"):
         check_budget_for_batch(n_live_calls_needed=1, avg_tokens_per_call=7000.0)
+
+
+# ---------------------------------------------------------------------------
+# RECOMMENDED_MAX_LIVE_SEED_RECORDS regression guard (added 2026-09-04):
+# re-derives the real estimate at this constant's own value against a fresh
+# (never-cached) generated batch and the REAL measured average cost, so a
+# future change to category-mix proportions or real per-record cost that
+# would make this constant unsafe fails a test rather than silently
+# stranding the README/dashboard's documented guidance.
+# ---------------------------------------------------------------------------
+
+def test_recommended_max_live_seed_records_fits_within_usable_budget():
+    from pathlib import Path
+
+    from src.agent.discrepancy import build_settlement_discrepancy_queue, build_unmatched_bank_line_queue
+    from src.agent.run_log import average_real_tokens_per_live_call
+    from src.data.generator import generate_batch
+    from src.matching.schema import bank_lines_to_frame, orders_to_frame, settlements_to_frame
+
+    project_root = Path(__file__).resolve().parents[1]
+    batch = generate_batch(num_records=RECOMMENDED_MAX_LIVE_SEED_RECORDS, seed=31415926)
+    orders_df = orders_to_frame(batch.orders)
+    settlements_df = settlements_to_frame(batch.settlements)
+    bank_df = bank_lines_to_frame(batch.bank_lines)
+    needing_diagnosis = len(build_settlement_discrepancy_queue(orders_df, settlements_df, bank_df)) + len(
+        build_unmatched_bank_line_queue(orders_df, settlements_df, bank_df)
+    )
+    avg = average_real_tokens_per_live_call(
+        [project_root / "data" / "agent_runs" / "frozen_1.jsonl", project_root / "data" / "agent_runs" / "layer4_test_cache.jsonl"]
+    )
+    estimated = needing_diagnosis * avg
+    usable_budget = DAILY_TOKEN_BUDGET - SAFETY_MARGIN_TOKENS
+    assert estimated <= usable_budget, (
+        f"RECOMMENDED_MAX_LIVE_SEED_RECORDS={RECOMMENDED_MAX_LIVE_SEED_RECORDS} no longer fits the usable "
+        f"daily budget: {needing_diagnosis} records needing diagnosis x ~{avg:.0f} real avg tokens/record "
+        f"= ~{estimated:.0f}, budget is {usable_budget}. Lower the constant in src/agent/rate_limiter.py "
+        "and update the README/dashboard copy that cites it."
+    )

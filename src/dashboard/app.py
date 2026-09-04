@@ -47,6 +47,7 @@ import altair as alt
 import polars as pl
 import streamlit as st
 
+from src.agent.rate_limiter import RECOMMENDED_MAX_LIVE_SEED_RECORDS
 from src.common.money import format_inr, from_paise
 from src.dashboard import api_client, tokens
 from src.dashboard.theme import inject_theme
@@ -378,6 +379,14 @@ if view == "run":
                 "category distribution. Full agent verification may take "
                 "longer and calls a live model."
             )
+            st.caption(
+                f"Recommended: {RECOMMENDED_MAX_LIVE_SEED_RECORDS} records or fewer. A never-seen batch "
+                "needs a real live model call per record needing judgment, against a hard daily token "
+                "cap on this key -- even the frozen dataset's own 100-record size would not fit a fresh "
+                "day's budget if it weren't already fully cached. A larger batch fails cleanly with a "
+                "clear message rather than posting partial results, but won't succeed until scaled down "
+                "or retried on a later day."
+            )
             if active_source != "seed":
                 st.caption('Switch Source to "seed" below to use this card.')
 
@@ -386,7 +395,17 @@ if view == "run":
     records_value = 100
     if source == "seed":
         seed_value = st.number_input("Seed", min_value=0, value=42, step=1, key="trigger_seed")
-        records_value = st.number_input("Records", min_value=1, value=100, step=1, key="trigger_records")
+        records_value = st.number_input(
+            "Records",
+            min_value=1,
+            value=100,
+            step=1,
+            key="trigger_records",
+            help=(
+                f"Recommended {RECOMMENDED_MAX_LIVE_SEED_RECORDS} or fewer for a live seed batch -- see "
+                "the daily token budget note above."
+            ),
+        )
 
     with st.expander("Advanced: cutoff date", expanded=False):
         st.caption(

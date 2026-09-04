@@ -160,6 +160,18 @@ def test_readme_states_largest_remainder_allocation_and_rounding_account():
     assert "ROUNDING_DIFFERENCE" in text
 
 
+def test_readme_states_recommended_live_seed_size_matches_real_constant():
+    """The README's recommended-records number must match the actual code
+    constant, not a hand-typed figure that could drift if the constant is
+    ever changed (e.g. after a future re-run of the verification in
+    src/agent/rate_limiter.py's own docstring)."""
+    from src.agent.rate_limiter import RECOMMENDED_MAX_LIVE_SEED_RECORDS
+
+    text = _readme_text()
+    assert str(RECOMMENDED_MAX_LIVE_SEED_RECORDS) in text
+    assert "recommend" in text.lower()
+
+
 # ---------------------------------------------------------------------------
 # Tests 3-4: the deterministic scorecard and trial balance embedded in
 # README.md match a real run against the frozen dataset, right now

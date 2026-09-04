@@ -331,6 +331,23 @@ def test_dashboard_initial_render_shows_trigger_controls(dashboard_client):
     assert any("Trigger a batch run" in i.value for i in at.info)
 
 
+def test_dashboard_run_screen_shows_recommended_live_seed_size(dashboard_client):
+    """The seed-size guidance (src/agent/rate_limiter.py::
+    RECOMMENDED_MAX_LIVE_SEED_RECORDS, 2026-09-04 addendum) must actually
+    render on the Run screen's "Bring your own seed" card, not just exist
+    as a constant nobody sees."""
+    from streamlit.testing.v1 import AppTest
+
+    from src.agent.rate_limiter import RECOMMENDED_MAX_LIVE_SEED_RECORDS
+
+    at = AppTest.from_file(APP_PATH, default_timeout=30)
+    at.run()
+
+    assert not at.exception
+    captions = [c.value for c in at.caption]
+    assert any(f"Recommended: {RECOMMENDED_MAX_LIVE_SEED_RECORDS}" in c for c in captions)
+
+
 # ---------------------------------------------------------------------------
 # Test 15 -- clicking "Trigger run" for the frozen source, then advancing
 # through the gate via "View Overview ->", shows the correct match-rate

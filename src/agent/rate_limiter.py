@@ -35,6 +35,26 @@ from datetime import datetime, timezone
 DAILY_TOKEN_BUDGET = 200_000
 SAFETY_MARGIN_TOKENS = 10_000
 
+# Recommended max --records for a live (never-cached) seed batch, so a whole
+# day's budget is not needed just to find out it doesn't fit (docs/plan.md
+# doesn't specify this; added and disclosed 2026-09-04 after a live
+# debugging session). Verified, not guessed (CLAUDE.md Sec.1): generating
+# fresh batches at increasing sizes and counting real settlement-discrepancy
+# + unmatched-bank-line records (src/agent/discrepancy.py) against the real
+# measured average cost/live-call (src/agent/run_log.py::
+# average_real_tokens_per_live_call) found records=70 fits inside the usable
+# budget (184,389 est. tokens) and records=75 does not (198,048 est.). 60 is
+# a deliberately conservative documented recommendation below that measured
+# boundary, not the boundary itself -- real per-record cost has ranged
+# ~4,400-11,700 tokens depending on category mix (see AGENT_LOGIC_VERSION's
+# history in graph.py), so sitting right at the edge would still risk a
+# false negative between measurements. Even the frozen dataset's own size
+# (100 records, 37 needing diagnosis) does NOT fit a fresh day's budget on
+# its own (est. 252,682 tokens) -- it only ever costs zero live tokens
+# because those 37 records are permanently cached, not because 100 is a
+# safe live-seed size in general.
+RECOMMENDED_MAX_LIVE_SEED_RECORDS = 60
+
 
 class AgentRateLimitedError(Exception):
     """Raised instead of attempting (or retrying) a live model call once
