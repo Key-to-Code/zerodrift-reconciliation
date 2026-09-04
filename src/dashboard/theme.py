@@ -244,24 +244,6 @@ def inject_theme() -> None:
             display: none !important;
         }}
 
-        /* Date Picker Styling */
-        div[data-testid="stDateInput"] > div {{
-            background-color: {tokens.COLOR_BACKGROUND};
-            border-radius: {tokens.RADIUS_SMALL}px;
-            border: 1px solid {tokens.COLOR_BORDER_SUBTLE};
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            padding: 2px;
-        }}
-        div[data-testid="stDateInput"] > div:focus-within {{
-            border-color: {tokens.COLOR_PRIMARY};
-            box-shadow: 0 0 0 3px {tokens.COLOR_PRIMARY}20;
-        }}
-        [class*="st-key-trigger_as_of"] input, [class*="st-key-forecast_as_of"] input {{
-            font-family: {tokens.MOCKUP_FONT_MONO};
-            padding: 8px 12px;
-            border: none !important;
-            box-shadow: none !important;
-        }}
 
         /* Overview: accent-left-border metric cards with a hover lift, and
            hovering a stacked-bar segment highlights its matching card --
@@ -395,24 +377,26 @@ def inject_theme() -> None:
             border-radius: {tokens.RADIUS_MEDIUM}px;
             overflow: hidden;
             font-size: 0.92rem;
-            /* Real reported bug: Code and Account text read as overlapping --
-               each cell's own left/right padding is real space, but a 19-20
-               char account_code (CASH_IN_TRANSIT_UTR, SUSPENSE_UNRESOLVED) in
-               a monospace font at 1.3fr left too little room, forcing a wrap
-               tight enough against the neighboring column to read as crowding.
-               column-gap adds a real, guaranteed gutter on top of cell padding
-               -- belt and suspenders, not relying on padding alone. */
-            column-gap: 20px;
+            /* column-gap removed: it breaks contiguous background colors 
+               on header/total rows. Using horizontal padding instead. */
         }}
         .ledger-table {{ grid-template-columns: 1.6fr 2.6fr 0.7fr 1.1fr 1.1fr 1.1fr; }}
-        .forecast-data-table {{ grid-template-columns: 1fr 1.3fr 1.3fr; margin-top: 14px; }}
+        .forecast-data-table {{ grid-template-columns: 1fr 1.3fr 1.3fr; margin-top: 24px; margin-bottom: 8px; }}
         .ledger-cell {{
             display: flex;
             align-items: center;
             min-width: 0;
-            padding: 16px 18px;
+            padding: 16px 32px;
             border-bottom: 1px solid {tokens.MOCKUP_COLOR_BORDER_SUBTLE};
             color: {tokens.MOCKUP_COLOR_TEXT_DARK};
+        }}
+        /* Nudge Account column to the right by ~4px */
+        .ledger-table .ledger-cell:nth-child(6n + 2) {{
+            padding-left: 36px;
+        }}
+        /* Nudge Type column to the left by ~5px */
+        .ledger-table .ledger-cell:nth-child(6n + 3) {{
+            padding-left: 2px;
         }}
         .ledger-cell-header {{
             background-color: {tokens.MOCKUP_COLOR_PAGE_BACKGROUND};
