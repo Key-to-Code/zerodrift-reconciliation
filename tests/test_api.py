@@ -572,6 +572,58 @@ def test_live_seed_trigger_never_touches_or_pollutes_the_frozen_cache_file(clien
 
 
 # ---------------------------------------------------------------------------
+# batch_run_recipes persistence (src/ledger/models.py, 2026-09-04): the real
+# incident this closes -- an in-memory dict lost a run's recipe on every
+# server restart, even though its ledger rows stayed in Postgres, orphaning
+# the run from every batch_run_id-gated endpoint. Recipe now lives in
+# Postgres, not process memory.
+# ---------------------------------------------------------------------------
+
+def test_triggered_run_recipe_persists_to_postgres(client, db_session):
+    from src.ledger.models import BatchRunRecipe
+
+    resp = client.post("/batch-runs", json={"source": "frozen"})
+    assert resp.status_code == 200
+    batch_run_id = resp.json()["batch_run_id"]
+
+    row = db_session.get(BatchRunRecipe, uuid.UUID(batch_run_id))
+    assert row is not None
+    assert row.source == "frozen"
+    assert row.records == 100
+
+
+def test_status_endpoint_depends_only_on_the_persisted_recipe_row_not_any_process_state(client, db_session):
+    """Simulates exactly what the real incident looked like, both
+    directions: (1) real ledger data with its recipe row gone (the old
+    bug's symptom -- proves there's no leftover in-memory fallback quietly
+    covering for it) correctly 404s; (2) re-inserting only the recipe row
+    for that same already-real data makes it recoverable again, with zero
+    re-triggering and zero re-posting -- proving the fix is a genuine
+    Postgres-backed lookup, not something scoped to the triggering request."""
+    from src.ledger.models import BatchRunRecipe
+
+    resp = client.post("/batch-runs", json={"source": "frozen"})
+    assert resp.status_code == 200
+    batch_run_id = resp.json()["batch_run_id"]
+
+    assert client.get(f"/batch-runs/{batch_run_id}/status").status_code == 200
+
+    row = db_session.get(BatchRunRecipe, uuid.UUID(batch_run_id))
+    db_session.delete(row)
+    db_session.commit()
+
+    resp = client.get(f"/batch-runs/{batch_run_id}/status")
+    assert resp.status_code == 404, "with the recipe row gone, this must 404 -- no hidden in-memory fallback"
+
+    db_session.add(BatchRunRecipe(batch_run_id=uuid.UUID(batch_run_id), source="frozen", seed=None, records=100))
+    db_session.commit()
+
+    resp = client.get(f"/batch-runs/{batch_run_id}/status")
+    assert resp.status_code == 200, "re-inserting the recipe row alone must recover access to the still-real ledger data"
+    assert resp.json()["total"] > 0
+
+
+# ---------------------------------------------------------------------------
 # Test 15 -- the seed/live source path is wired through an injectable
 # diagnose_fn -- no real Groq call is required to exercise it in this suite
 # ---------------------------------------------------------------------------

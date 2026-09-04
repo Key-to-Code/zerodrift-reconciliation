@@ -2,18 +2,28 @@
 src/forecast, and src/orchestration/batch_runner.py (docs/plan.md Layer 6).
 Every number this API serves traces to an existing tested function in those
 modules -- the only code added here is HTTP routing, request/response
-shaping, and an in-memory batch_run_id -> recipe registry.
+shaping, and the batch_run_id -> recipe lookup below.
 
 Registry design note: src/data/generator.py's determinism is this project's
 central claim (CLAUDE.md Sec.5) -- generate_batch(records, seed) is
 byte-identical every time. So a "seed" batch run's raw order/settlement/bank
-data never needs to be persisted to be re-read later; the registry only
-remembers the RECIPE (source/seed/records) per batch_run_id, not the data
-itself, and regenerates on demand. It lives in process memory (a single
-FastAPI process, consistent with CLAUDE.md Sec.2's modular-monolith framing)
-and is lost on restart -- an accepted, documented tradeoff: the ledger rows
-themselves stay in Postgres, keyed by batch_run_id, and are still directly
-queryable there even if the registry forgets which recipe produced them.
+data never needs to be persisted to be re-read later; only the RECIPE
+(source/seed/records) per batch_run_id needs to survive, and the data
+regenerates on demand.
+
+That recipe now lives in the `batch_run_recipes` Postgres table
+(src/ledger/models.py::BatchRunRecipe), not an in-process dict -- FIXED
+2026-09-04 after a real incident: an in-memory registry is lost on every
+server restart (including uvicorn's own --reload on a source-file save,
+the documented dev workflow), even though the ledger rows a run produced
+stay safely in Postgres the whole time. A restart mid-session orphaned an
+in-progress demo run -- the dashboard kept confidently showing "loaded
+successfully" from stale browser session state, while every actual data
+fetch 404'd against a process that had forgotten the run ever existed.
+Persisting the recipe closes that gap: any process, restarted or not, can
+answer "is this batch_run_id known" and "what recipe produced it" from the
+one shared database, consistent with CLAUDE.md Sec.2's modular-monolith
+framing (still one Postgres instance, no new infrastructure).
 """
 from __future__ import annotations
 
@@ -35,7 +45,7 @@ from src.data.generator import generate_batch
 from src.data.models import BankStatementLine, GatewaySettlement, InternalOrder
 from src.forecast.cashflow import project_cashflow
 from src.ledger.journal import trial_balance
-from src.ledger.models import ReconciliationMatch, ensure_schema_exists, get_engine, get_sessionmaker
+from src.ledger.models import BatchRunRecipe, ReconciliationMatch, ensure_schema_exists, get_engine, get_sessionmaker
 from src.orchestration.batch_runner import DEFAULT_AGENT_CACHE_PATH, DiagnoseFn, run_batch
 
 FROZEN_DIR = Path(__file__).resolve().parents[2] / "data" / "challenge_batch_100"
@@ -123,10 +133,6 @@ def get_diagnose_fn() -> DiagnoseFn | None:
     return None
 
 
-# batch_run_id -> {"source", "seed", "records"}. See module docstring.
-_BATCH_RUN_REGISTRY: dict[uuid.UUID, dict] = {}
-
-
 def _load_frozen() -> tuple[list[InternalOrder], list[GatewaySettlement], list[BankStatementLine]]:
     orders = [
         InternalOrder.model_validate(d)
@@ -208,11 +214,11 @@ class ForecastRow(BaseModel):
     high_paise: int
 
 
-def _require_known_run(batch_run_id: uuid.UUID) -> dict:
-    recipe = _BATCH_RUN_REGISTRY.get(batch_run_id)
-    if recipe is None:
+def _require_known_run(batch_run_id: uuid.UUID, session: Session) -> dict:
+    row = session.get(BatchRunRecipe, batch_run_id)
+    if row is None:
         raise HTTPException(status_code=404, detail=f"unknown batch_run_id: {batch_run_id}")
-    return recipe
+    return {"source": row.source, "seed": row.seed, "records": row.records}
 
 
 @app.post("/batch-runs", response_model=BatchRunSummaryResponse)
@@ -238,7 +244,8 @@ def trigger_batch_run(
         # this, the underlying groq.RateLimitError propagated uncaught to a
         # bare 500 with the real reason hidden from the caller.
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    _BATCH_RUN_REGISTRY[batch_run_id] = {"source": req.source, "seed": req.seed, "records": req.records}
+    session.add(BatchRunRecipe(batch_run_id=batch_run_id, source=req.source, seed=req.seed, records=req.records))
+    session.commit()
     return BatchRunSummaryResponse(
         batch_run_id=str(batch_run_id),
         total_orders=summary.total_orders,
@@ -251,7 +258,7 @@ def trigger_batch_run(
 
 @app.get("/batch-runs/{batch_run_id}/status", response_model=ReconciliationStatusResponse)
 def get_status(batch_run_id: uuid.UUID, session: Session = Depends(get_session)) -> ReconciliationStatusResponse:
-    _require_known_run(batch_run_id)
+    _require_known_run(batch_run_id, session)
     rows = session.execute(
         select(ReconciliationMatch.status, sa_func.count())
         .where(ReconciliationMatch.batch_run_id == batch_run_id)
@@ -269,7 +276,7 @@ def get_status(batch_run_id: uuid.UUID, session: Session = Depends(get_session))
 
 @app.get("/batch-runs/{batch_run_id}/exceptions", response_model=list[ExceptionRecord])
 def get_exceptions(batch_run_id: uuid.UUID, session: Session = Depends(get_session)) -> list[ExceptionRecord]:
-    _require_known_run(batch_run_id)
+    _require_known_run(batch_run_id, session)
     rows = (
         session.execute(
             select(ReconciliationMatch)
@@ -287,7 +294,7 @@ def get_exceptions(batch_run_id: uuid.UUID, session: Session = Depends(get_sessi
 
 @app.get("/batch-runs/{batch_run_id}/trial-balance", response_model=list[TrialBalanceRow])
 def get_trial_balance(batch_run_id: uuid.UUID, session: Session = Depends(get_session)) -> list[TrialBalanceRow]:
-    _require_known_run(batch_run_id)
+    _require_known_run(batch_run_id, session)
     tb = trial_balance(session, batch_run_id)
     return [TrialBalanceRow(**row) for row in tb.to_dicts()]
 
@@ -299,7 +306,7 @@ def get_forecast(
     horizon_days: int = 7,
     session: Session = Depends(get_session),
 ) -> list[ForecastRow]:
-    recipe = _require_known_run(batch_run_id)
+    recipe = _require_known_run(batch_run_id, session)
     orders, settlements, _bank_lines = _load_for_recipe(recipe)
     result = project_cashflow(session, batch_run_id, orders, settlements, as_of=as_of, horizon_days=horizon_days)
     return [

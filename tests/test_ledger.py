@@ -688,3 +688,42 @@ def test_ensure_schema_exists_is_idempotent_when_already_present(schemaless_engi
         f"({count_after_first_call} -> {count_after_second_call}) -- it should "
         f"be a no-op once the schema already exists"
     )
+
+
+# ---------------------------------------------------------------------------
+# batch_run_recipes (src/ledger/models.py, added 2026-09-04): persists the
+# recipe behind a triggered batch_run_id in Postgres instead of an
+# in-process dict, so it survives a server restart. Real incident: an
+# in-memory registry lost this mapping on every restart (including
+# uvicorn's own --reload on a source-file save) even though the ledger
+# rows a run produced stayed safely in Postgres.
+# ---------------------------------------------------------------------------
+
+def test_ensure_schema_exists_also_creates_batch_run_recipes_on_a_fresh_database(schemaless_engine):
+    from src.ledger.models import ensure_schema_exists
+
+    ensure_schema_exists(schemaless_engine)
+
+    with schemaless_engine.connect() as conn:
+        assert conn.execute(text("SELECT to_regclass('public.batch_run_recipes')")).scalar() is not None
+
+
+def test_ensure_batch_run_recipes_table_exists_backfills_it_on_an_already_schema_d_database(schemaless_engine):
+    """The exact real-world scenario this fix targets: a database that
+    already has the rest of the schema (accounts exists, so
+    ensure_schema_exists's own "is anything missing" check is a no-op) but
+    predates batch_run_recipes -- e.g. any database schema'd before this
+    fix. ensure_schema_exists must still backfill the new table."""
+    from src.ledger.models import ensure_schema_exists
+
+    ensure_schema_exists(schemaless_engine)  # full apply, as if this were an older, already-schema'd DB
+    with schemaless_engine.connect() as conn:
+        conn.execute(text("DROP TABLE batch_run_recipes"))
+        conn.commit()
+        assert conn.execute(text("SELECT to_regclass('public.batch_run_recipes')")).scalar() is None
+        assert conn.execute(text("SELECT to_regclass('public.accounts')")).scalar() is not None  # rest untouched
+
+    ensure_schema_exists(schemaless_engine)  # must backfill the missing table, not skip everything
+
+    with schemaless_engine.connect() as conn:
+        assert conn.execute(text("SELECT to_regclass('public.batch_run_recipes')")).scalar() is not None

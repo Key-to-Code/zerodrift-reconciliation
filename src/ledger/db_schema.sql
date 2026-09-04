@@ -45,6 +45,24 @@ CREATE TABLE reconciliation_matches (
     UNIQUE (batch_run_id, order_id)
 );
 
+-- Persists the recipe (source/seed/records) behind each triggered
+-- batch_run_id -- src/api/main.py's Layer 6 in-process registry used to be
+-- a plain Python dict, lost on every process restart even though the
+-- ledger rows it described stayed safely in Postgres (real incident,
+-- 2026-09-04: a restart during active development orphaned an in-progress
+-- demo run). IF NOT EXISTS since this table was added after the rest of
+-- this schema was already applied to existing databases -- see
+-- src/ledger/models.py::ensure_batch_run_recipes_table_exists, which
+-- creates it independently of the "is the rest of the schema already
+-- there" check ensure_schema_exists otherwise relies on.
+CREATE TABLE IF NOT EXISTS batch_run_recipes (
+    batch_run_id UUID PRIMARY KEY,
+    source VARCHAR(20) NOT NULL,
+    seed INT,
+    records INT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX idx_journal_lines_entry ON journal_lines(entry_id);
 CREATE INDEX idx_journal_entries_reference ON journal_entries(reference_id);
 CREATE INDEX idx_journal_entries_run ON journal_entries(batch_run_id);

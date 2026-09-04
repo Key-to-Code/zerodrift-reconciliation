@@ -101,6 +101,22 @@ class ReconciliationMatch(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
+class BatchRunRecipe(Base):
+    """Persists which (source, seed, records) recipe produced a given
+    batch_run_id -- replaces src/api/main.py's old in-process dict, which
+    lost this mapping on every server restart even though the ledger rows
+    it described were safely in Postgres the whole time (2026-09-04
+    incident)."""
+
+    __tablename__ = "batch_run_recipes"
+
+    batch_run_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    seed: Mapped[int | None] = mapped_column(nullable=True)
+    records: Mapped[int] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
 def get_database_url() -> str:
     return os.environ.get(
         "DATABASE_URL",
@@ -157,6 +173,29 @@ def reset_schema(engine) -> None:
     create_schema(engine)
 
 
+_BATCH_RUN_RECIPES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS batch_run_recipes (
+    batch_run_id UUID PRIMARY KEY,
+    source VARCHAR(20) NOT NULL,
+    seed INT,
+    records INT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+
+def ensure_batch_run_recipes_table_exists(engine) -> None:
+    """Creates batch_run_recipes if it's missing, independent of whether the
+    REST of the schema is already present -- this table was added after
+    db_schema.sql's other tables, so an existing, already-schema'd database
+    (accounts already exists -> ensure_schema_exists's own check is a no-op)
+    would otherwise never get it. IF NOT EXISTS makes this safe to call
+    unconditionally, every startup, alongside ensure_schema_exists."""
+    with engine.connect() as conn:
+        conn.execute(text(_BATCH_RUN_RECIPES_TABLE_SQL))
+        conn.commit()
+
+
 def ensure_schema_exists(engine) -> None:
     """Applies db_schema.sql if the ledger schema isn't already present on
     this database -- idempotent, safe to call every time the app starts.
@@ -173,6 +212,7 @@ def ensure_schema_exists(engine) -> None:
         already_exists = conn.execute(text("SELECT to_regclass('public.accounts')")).scalar()
     if already_exists is None:
         create_schema(engine)
+    ensure_batch_run_recipes_table_exists(engine)
 
 
 def ensure_database_exists(admin_database_url: str, target_db_name: str) -> None:
