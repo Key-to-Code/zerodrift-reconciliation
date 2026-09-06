@@ -1,6 +1,10 @@
 # ZeroDrift
 
+**Live demo:** [zerodrift-reconciliation-engine.streamlit.app](https://zerodrift-reconciliation-engine.streamlit.app/) — the backend runs on a free Render instance, so the first request after a period of inactivity can take 20-50s to wake up before it responds. That's cold-start latency, not a bug.
+
 An AI-assisted reconciliation engine that matches orders, gateway settlements, and bank statements - and is honest about the cases it can't confidently resolve, instead of guessing. Built for Razorpay Buildathon Track 04.
+
+A full walkthrough deck — the problem, architecture, core algorithms, database design, design trade-offs, where the LLM lives, proof of correctness, and how this scales — is at [`docs/zerodrift_deck_v2.html`](docs/zerodrift_deck_v2.html). Open it directly in a browser.
 
 ## Architecture
 
