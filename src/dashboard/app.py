@@ -21,14 +21,27 @@ Known, deliberately-scoped gaps:
 """
 from __future__ import annotations
 
+import sys
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import altair as alt
 import polars as pl
 import streamlit as st
 
 st.set_page_config(page_title="ZeroDrift Reconciliation", layout="wide")
+
+# `streamlit run` locally is launched via `python -m streamlit`, which puts
+# the repo root (cwd) on sys.path -- that's the only reason `from src...`
+# below resolves. Streamlit Community Cloud's own launcher only puts this
+# script's directory (src/dashboard) on sys.path, not the repo root, so the
+# same import fails there with ModuleNotFoundError. Adding the repo root
+# explicitly makes the import work regardless of how the process was
+# started.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from src.agent.rate_limiter import RECOMMENDED_MAX_LIVE_SEED_RECORDS
 from src.common.money import format_inr, from_paise
