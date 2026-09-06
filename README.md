@@ -246,3 +246,314 @@ That specific model wasn't the original plan, either. The intent going in was Ll
 None of this is a permanent architectural choice -swapping back to Claude for production is a one-line change in `src/agent/graph.py::_build_model()`.
 
 **The agent's evaluation numbers are being gathered across several days, not one sitting -and that's deliberate, not a shortcut.** A full evaluation run means calling the live agent on every record that needs real judgment (20 `agent_resolved` + 17 `honest_exception` = 37 of them, per the frozen dataset's `ground_truth.json`), and doing that three separate times so the reported result is an honest min/median/max rather than one lucky run dressed up as three. Groq's free tier caps out at 200,000 tokens a day, and three full runs need roughly three times that. So the three run logs -`data/agent_runs/frozen_1.jsonl`, `frozen_2.jsonl`, `frozen_3.jsonl` -genuinely have timestamps days apart. That's the token budget talking, not neglect.
+
+---
+
+## Full deck
+
+*Razorpay Buildathon · Track 04*
+
+### ZeroDrift
+
+An AI-assisted financial reconciliation engine. It matches orders, gateway settlements and bank statements automatically, and hands over to a bounded diagnostic agent only for what it genuinely can't resolve on its own.
+
+`Deterministic core` &nbsp;&middot;&nbsp; `Bounded diagnostic agent` &nbsp;&middot;&nbsp; `Byte-reproducible ledger` &nbsp;&middot;&nbsp; `Modular monolith`
+
+---
+
+### 01 &middot; The problem
+
+#### Three records of one payment. They don't agree.
+
+Every payment through a gateway leaves three separate paper trails, and in the real world they rarely match on the first try.
+
+1. **Order record** -what the customer paid, per your own system.
+2. **Settlement report** -gross, minus MDR, minus GST on MDR, minus 194-O TDS, netted out by the gateway.
+3. **Bank statement** -what actually lands, days later, in one lump credit per UTR batch.
+4. Fee drift, missing tax lines, N orders folded into 1 credit, the occasional orphan with nothing behind it.
+
+**Why they diverge**
+
+```
+  Gross amount
+  - MDR (nil on UPI, by regulation)
+  - GST on MDR · 18%
+  - TDS · Sec 194-O · 0.1% (reduced from 1%, effective Oct 2024)
+  = Net settlement ≠ bank credit, some days
+```
+
+---
+
+### 02 &middot; What it does
+
+#### Deterministic first. Judgment only for what's left.
+
+A two-stage pipeline, and the split between the stages is the actual design of the project.
+
+```mermaid
+flowchart LR
+    A["Orders, settlements, bank lines -3 raw sources"] --> B["Fast path -exact ID, regex UTR, fuzzy match"]
+    B -- clean match --> C["Resolved, posted"]
+    B -- ambiguous --> D["Diagnostic agent -the remaining ~1/3"]
+    D --> E["Honest exception, to suspense"]
+```
+
+- Stage 1 solves what's mechanical: exact joins, narration parsing, fuzzy strings, inside strict amount and date bounds. Clears 63 of 100 on benchmark, zero model calls.
+- Stage 2's job isn't "flag this" -it's **figure out why**.
+- No real confidence &rarr; no guess. It posts to a suspense account and the books still balance.
+- A system that knows when it doesn't know is worth more than one that confidently hands back a wrong number.
+
+---
+
+### 03 &middot; System architecture
+
+#### One process, one database, zero float.
+
+A modular monolith -one Python process, one Streamlit app, one Postgres instance, talking through plain function calls. Not distributed, no broker, no separate services.
+
+```mermaid
+flowchart TB
+    subgraph Sources["Synthetic dataset"]
+        O["internal_orders.json"]
+        G["gateway_settlement.json"]
+        B["bank_statement.json"]
+    end
+    subgraph Core["One Python process, one Streamlit process, one PostgreSQL instance"]
+        FP["Fast path: Polars 3-hop cascade"]
+        AG["Diagnostic agent: LangGraph bounded loop"]
+        LD[("PostgreSQL ledger: double entry")]
+        FC["Cash forecaster"]
+        API["FastAPI transport"]
+        UI["Streamlit dashboard"]
+    end
+    O --> FP
+    G --> FP
+    B --> FP
+    FP -- clean match --> LD
+    FP -- discrepancy queue --> AG
+    AG -- resolution or honest exception --> LD
+    LD --> FC
+    LD --> API
+    FC --> API
+    API --> UI
+```
+
+*Every arrow is an in-process function call. Nothing here crosses a network boundary.*
+
+- The ledger's correctness rests on single ACID transactions: a journal entry and its lines post together, or not at all.
+- Splitting that guarantee across services buys operational risk for no benefit at this scale.
+- Stack: Polars for the fast path, LangGraph for the bounded agent, FastAPI as the sole transport boundary, Streamlit for the dashboard, PostgreSQL for the ledger.
+- The dashboard never imports ledger or matching code directly. It talks to the API over HTTP, same as any other client would.
+
+---
+
+### 04 &middot; Core algorithms and data structures
+
+#### The fast path is a cascade of guards, not one big match.
+
+Every hop is a cheap, exact check before the next, more expensive one runs.
+
+```mermaid
+flowchart TB
+    A["Hop 1: exact join on order_id, grouped by UTR"] --> B{"Rate, timing, refund clean?"}
+    B -- no --> X["Discrepancy queue"]
+    B -- yes --> C["Hop 2: sum settlements per UTR, integer paise"]
+    C --> D{"Sum equals bank credit?"}
+    D -- no --> X
+    D -- yes --> E1["Phase 1: exact token regex on narration"]
+    E1 -- match --> H{"Exactly one candidate?"}
+    E1 -- no match --> E2["Phase 2: fuzzy match, rapidfuzz partial_ratio, threshold 85"]
+    E2 --> H
+    H -- yes --> I["Resolved: fast path"]
+    H -- no or many --> X
+```
+
+*Grouping happens by hash map, not a database join. Fuzzy matching only runs on the narrations exact tokens miss.*
+
+- **Hash maps** group settlements by UTR and index orders by ID: O(1) lookup, not a nested scan.
+- **Dataclasses** carry structured results (`ResolvedGroup`, `DiscrepancyItem`) out of the cascade instead of loose dicts.
+- **Integer paise** throughout: fixed-point arithmetic standing in for money, never a float.
+
+> **Key insight.** Splitting one bank credit across N orders: floor every share, then hand leftover paise to the largest remainders until it matches exactly.
+
+---
+
+### 05 &middot; Database architecture
+
+#### The invariants live in Postgres, not just in Python.
+
+A hand-authored schema, not an ORM auto-migration. The double-entry guarantee is enforced by the database itself.
+
+```mermaid
+erDiagram
+    ACCOUNTS ||--o{ JOURNAL_LINES : "posted to"
+    JOURNAL_ENTRIES ||--|{ JOURNAL_LINES : contains
+    JOURNAL_ENTRIES |o--o| RECONCILIATION_MATCHES : resolves
+    BATCH_RUN_RECIPES ||--o{ JOURNAL_ENTRIES : scopes
+    ACCOUNTS {
+        int account_id PK
+        string account_code UK
+        string account_type
+    }
+    JOURNAL_ENTRIES {
+        int entry_id PK
+        uuid batch_run_id
+        string idempotency_key UK
+        string status
+    }
+    JOURNAL_LINES {
+        int line_id PK
+        int entry_id FK
+        int account_id FK
+        char direction
+        numeric amount
+    }
+    RECONCILIATION_MATCHES {
+        int match_id PK
+        uuid batch_run_id
+        string status
+    }
+    BATCH_RUN_RECIPES {
+        uuid batch_run_id PK
+        string source
+        int seed
+    }
+```
+
+*Five tables. Every money column is NUMERIC, every status column is a Postgres ENUM, not a free string.*
+
+- A deferred constraint trigger checks every journal entry's lines sum to zero before commit: debit equals credit, enforced by Postgres itself.
+- ENUM types replace free strings, so an invalid status can't be written at all.
+- A unique `idempotency_key` on `journal_entries` blocks a duplicate post outright, at the database layer.
+- `batch_run_recipes` persists which recipe produced a run, after an in-process dict lost that mapping on every restart.
+
+---
+
+### 06 &middot; Design patterns and trade-offs
+
+#### Every pattern here was chosen against a named alternative.
+
+| Pattern | Where | Why |
+|---|---|---|
+| Two-phase fallback matching | fast path, hop 3 | Exact token regex first, fuzzy match only as fallback, so a messy narration doesn't turn every match into a guess. |
+| Audit-then-trust gatekeeper | agent resolution | Claimed evidence is re-checked against the graph's own recorded tool calls before anything posts. |
+| Bounded state machine | LangGraph vs. Agent SDK | A hardcoded ceiling on tool calls mattered more than autonomy. Agent SDK is the intended production swap. |
+| Log-and-replay | `evaluate.py --replay` | Every agent call is written to a transcript. The same scoring logic replays offline, zero live calls. |
+| Hand-authored schema | Postgres, vs. ORM migrations | Full control of ENUM types and a deferred trigger, at the cost of automatic cross-dialect migrations this project doesn't need. |
+| Largest-remainder allocation | UTR batch posting, vs. proportional split | Exact integer paise every time, any genuine residual routed to a dedicated rounding account, never fudged into one order. |
+
+---
+
+### 07 &middot; Where, and why, the LLM
+
+#### One bounded step. On a short leash.
+
+It lives in exactly one place, and only ever sees what the deterministic pass could not resolve.
+
+```mermaid
+flowchart TD
+    A["Discrepancy record"] --> B["Diagnostic agent"]
+    B -- "up to 3 tool calls" --> C["Read only tools: ledger, settlement, rate lookups"]
+    C --> B
+    B --> D["Proposed resolution"]
+    D --> E{"Gatekeeper"}
+    E -- "checks recorded tool calls" --> F{"Evidence supports it?"}
+    F -- yes --> G["Posted to ledger"]
+    F -- no --> H["honest_exception, to suspense"]
+```
+
+*The gatekeeper checks the graph's own record of what happened, never the model's account of it.*
+
+- Telling an Amex surcharge from an international markup means reading a contract clause: a judgment call, not a lookup table.
+- Read-only tools, up to 3 calls per record, no ledger write access, ever.
+- LangGraph, not the Agent SDK, for this node: an explicit state machine with a hard call ceiling. Agent SDK is still the real production target, one line away.
+
+> **Key insight.** It proposes a diagnosis. It never decides that its own diagnosis gets posted.
+
+---
+
+### 08 &middot; Proof, not just claims
+
+#### Reproducible where it can be. Honest where it can't.
+
+Two very different halves of the system get two very different kinds of scorecard.
+
+```mermaid
+flowchart TB
+    subgraph DET["Deterministic path"]
+        direction LR
+        D1["Fixed seed"] --> D2["Generator"] --> D3["Fast path and ledger posting"] --> D4["Byte identical output, every run"]
+    end
+    subgraph AGT["Agent path, evaluated three times"]
+        direction LR
+        A1["Discrepancy queue"] --> A2["Run 1"]
+        A1 --> A3["Run 2"]
+        A1 --> A4["Run 3"]
+        A2 --> A5["Scored against ground_truth.json: min, median, max"]
+        A3 --> A5
+        A4 --> A5
+    end
+    A1 -.-> LOG[("Every call logged")]
+    LOG -. "offline replay, zero live calls" .-> A5
+```
+
+*The deterministic block gets one number. The agent block never does.*
+
+| Deterministic path | Agent path |
+|---|---|
+| Matching, ledger postings, paise math -**byte-reproducible** for a given seed, proven by tests. | Genuinely non-deterministic. Adversarial traps in the dataset bait a false match on purpose. |
+
+---
+
+### 09 &middot; Closing, quick reference
+
+#### The questions most likely to come next.
+
+**Why not split this into separate services?** Ledger correctness rests on single ACID transactions. Splitting that apart buys risk for no benefit at this scale.
+
+**Why LangGraph, not the Claude Agent SDK?** A hardcoded, explicit loop with a hard 3-call ceiling. The Agent SDK is still the intended production target, one line away.
+
+**Why Decimal and paise, never float?** A float can't exactly represent most decimal fractions. On a money path, that is a bug, not a quirk.
+
+**Why largest-remainder allocation?** Proportional division leaves paise unallocated on most multi-order batches. That is the normal case, not an edge case.
+
+**Why is UPI's MDR always nil?** Regulatory: nil merchant discount rate on UPI P2M. A UPI settlement carrying a fee is not a real transaction.
+
+**Why 0.1% TDS, reduced from 1%?** Section 194-O's rate is 0.1%, reduced from 1% effective October 2024. The old rate would be a checkable mistake.
+
+**Why business-day windows, not calendar days?** A window crossing a weekend falsely flags a clean transaction, proven with a regression test, not left theoretical.
+
+**What happens when the agent can't tell?** It exits to an honest exception, posts to suspense, and the books still balance. It does not guess.
+
+---
+
+### 10 &middot; How do we scale this
+
+#### Two paths. Two different bottlenecks.
+
+The scaling story splits in two, because the deterministic path and the agent path run into completely different limits.
+
+```mermaid
+flowchart LR
+    Q[("Discrepancy queue, Postgres")] -- "SELECT ... FOR UPDATE SKIP LOCKED" --> W1["Worker 1"]
+    Q --> W2["Worker 2"]
+    Q --> W3["Worker N"]
+    W1 --> AG["Diagnostic agent, Claude Agent SDK"]
+    W2 --> AG
+    W3 --> AG
+    AG --> LD[("Ledger: resolution or honest exception")]
+```
+
+*Records are diagnosed independently and read-only, so this fans out with zero new infrastructure -Postgres itself is the queue.*
+
+| Deterministic path &middot; 60-70% | Agent path &middot; the ~30% tail |
+|---|---|
+| Polars over hash-map joins, no LLM in the loop -**CPU-bound**, embarrassingly cheap. | A real, tested ceiling, not a guess: the 1000-record stress test needed **~2.5M tokens** against a 200,000/day budget -about 12.7x over. |
+| Postgres stays a single strongly-consistent writer for the ACID guarantee; read replicas or indexes come later, purely for dashboard reads. | **RECOMMENDED_MAX_LIVE_SEED_RECORDS = 60** exists because of this, and the batch pre-flight refuses to start rather than fail halfway through. |
+| Scales with the boring levers any Postgres system uses: indexing, connection pooling, partitioning by **batch_run_id**. | |
+
+1. **Swap the model tier.** The 200k/day ceiling is Groq's free-tier limit, kept for dev/test cost reasons. Production target is the Claude Agent SDK on a paid tier -a one-line change in `_build_model()` that removes the binding constraint.
+2. **Parallelize the agent step, not the architecture.** Each record is diagnosed independently with no shared mutable state, so a bounded worker pool pulling from the same queue is the natural next increment, not a redesign.
+3. **The fast path absorbs most of the growth.** Only the ~30% ambiguous tail hits the LLM, so the expensive path scales sublinearly with total volume.
+
+> **Key insight.** None of this requires breaking the monolith apart -it needs a bigger token budget and a worker pool, a far cheaper sentence to defend than a service split.
