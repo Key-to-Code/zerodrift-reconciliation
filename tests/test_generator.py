@@ -489,3 +489,18 @@ def test_fee_drift_is_international_flag_actually_used_by_generator(batch):
     assert "AMEX_SURCHARGE" in domestic_root_causes, (
         "no fee_drift settlement had is_international=False -- AMEX_SURCHARGE is unreachable"
     )
+
+
+# ---------------------------------------------------------------------------
+# Real bug found via a Render deploy: generate_batch(num_records=1, ...)
+# crashed with an opaque IndexError ("Cannot choose from an empty sequence")
+# deep inside adversarial_trap generation, because _scaled_counts only
+# rejected a negative clean_match count, not clean_match == 0 -- but
+# adversarial_trap is always forced to >=1 and always needs a clean_match
+# "twin" to pick from. Now this must raise the documented, actionable
+# ValueError instead of crashing on an internal implementation detail.
+# ---------------------------------------------------------------------------
+
+def test_generate_batch_too_small_for_category_minimums_raises_clean_value_error():
+    with pytest.raises(ValueError, match="too small to satisfy category minimums"):
+        generate_batch(num_records=1, seed=42)

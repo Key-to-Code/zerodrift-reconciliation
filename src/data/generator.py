@@ -94,7 +94,12 @@ def _scaled_counts(num_records: int) -> dict[str, int]:
         scaled["adversarial_trap"] = 1
     diff = num_records - sum(scaled.values())
     scaled["clean_match"] += diff
-    if scaled["clean_match"] < 0:
+    # adversarial_trap is forced to >=1 above, and its generation step always
+    # picks a "twin" from clean_match_orders -- so clean_match must be >=1
+    # too, not just non-negative. A clean_match of exactly 0 used to pass
+    # this guard and crash later with an opaque IndexError from rng.choice
+    # on an empty list.
+    if scaled["clean_match"] < 1:
         raise ValueError(f"num_records={num_records} too small to satisfy category minimums")
     return scaled
 
