@@ -21,7 +21,25 @@ from typing import Callable
 
 import httpx
 
-DEFAULT_BASE_URL = os.environ.get("DASHBOARD_API_BASE_URL", "http://localhost:8000")
+
+def _resolve_base_url() -> str:
+    # Streamlit Cloud guarantees a secret is visible via st.secrets; mirroring
+    # it into os.environ is undocumented behavior we shouldn't depend on. Try
+    # st.secrets first (import lazily -- this module runs fine outside a
+    # Streamlit process, e.g. under pytest, where st.secrets has no backing
+    # file at all), then fall back to os.environ for local dev / docker.
+    try:
+        import streamlit as st
+
+        url = st.secrets.get("DASHBOARD_API_BASE_URL")
+        if url:
+            return str(url)
+    except Exception:
+        pass
+    return os.environ.get("DASHBOARD_API_BASE_URL", "http://localhost:8000")
+
+
+DEFAULT_BASE_URL = _resolve_base_url()
 
 # A `source="seed"` trigger runs the real agent synchronously, in-process,
 # for every non-fast-path record before the HTTP response returns (the
@@ -33,9 +51,12 @@ DEFAULT_BASE_URL = os.environ.get("DASHBOARD_API_BASE_URL", "http://localhost:80
 # this can genuinely take several minutes -- the client's general 30s
 # timeout (fine for every other, always-fast DB-read endpoint) was silently
 # too short for the one endpoint the UI's own "this may take a minute..."
-# copy already promised more time for. A much larger custom "Records" value
-# on the Run screen's live-seed card could still exceed even this.
-TRIGGER_BATCH_RUN_TIMEOUT_SECONDS = 600.0
+# copy already promised more time for. 600s itself proved too short for a
+# 55-live-record run (MODEL_CALL_PACING_SECONDS pacing plus Groq per-minute
+# 429 backoff stacking across ~17 records needing diagnosis) -- raised to
+# 1200s. A much larger custom "Records" value on the Run screen's live-seed
+# card could still exceed even this.
+TRIGGER_BATCH_RUN_TIMEOUT_SECONDS = 1200.0
 
 
 def _default_client_factory() -> httpx.Client:
